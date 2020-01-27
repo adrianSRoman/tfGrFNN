@@ -59,8 +59,8 @@ class connection():
         self.conn_type = conn_type 
         self.save_steps = save_steps
 
-def connect(source = None, target = None, conn_matrix = None, conn_type = None, ):
-    
+def connect(source = None, target = None, conn_matrix = None, conn_type = None,
+        learn = True, ): 
     target.connections.append(conn_matrix) 
 
     return target
