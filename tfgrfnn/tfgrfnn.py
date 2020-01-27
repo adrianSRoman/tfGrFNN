@@ -10,17 +10,17 @@ class oscillators():
                     osctype = hopf(),
                     nosc = 256,
                     freqlims = (0.12, 8.0),
-                    freqspace = 'log',
+                    freqspacing = 'log',
                     initconds = np.zeros((256, )),
                     save_steps = True):
 
         self.name = name
         self.osctype = osctype
         self.params = self.osctype.params()
-        self.freqspace = freqspace
+        self.freqspacing = freqspacing
         self.freqlims = freqlims
         self.nosc = nosc
-        if self.freqspac == 'log':
+        if self.freqspacing == 'log':
             self.freqs = np.logspace(np.log10(self.freqlims[0]),
                             np.log10(self.freqlims[1]), 
                             self.nosc)
@@ -28,7 +28,7 @@ class oscillators():
                 self.freqdelta = self.freqs[1] / self.freqs[0]
             else:
                 self.freqdelta = 1
-        elif self.freqspac == 'lin':
+        elif self.freqspacing == 'lin':
             self.freqs = np.linpace(self.freqlims[0],
                             self.freqlims[1],
                             self.nosc)
