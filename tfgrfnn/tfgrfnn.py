@@ -3,6 +3,7 @@ import tensorflow as tf
 
 from oscillator_types import hopf
 from connection_learning_rule_types import phase_lock 
+from ode_functions import xdot_ydot, crdot_cidot
 
 class oscillators():
 
@@ -72,7 +73,7 @@ class Model():
                     layers = None,
                     zfun = xdot_ydot,
                     cfun = crdot_cidot,
-                    time = tf.range(1, 0.01, dtype = tf.float64),
+                    time = tf.range(1, delta = 0.01, dtype = tf.float64),
                     dt = 0.01):
 
         self.layers = layers
@@ -83,40 +84,48 @@ class Model():
 
     def integrate(self):
 
-        all_osc_init_conds, all_conn_init_conds = [oscillatos.initconds, [connection.initconds for connection in oscillators] 
-                                                    for oscillators in self.layers]
+        all_layers_initconds, all_layers_connections = [(layer.initconds, layer.connections) for layer in self.layers]
+        all_conns_initconds = [[connection.initconds for connection in layer_connections] for layer_connections in all_layers_connections]
 
-        def scan_func(all_init_conds, time):
+        def odeRK4(all_init_conds, time):
 
-            all_osc_init_conds, all_conn_init_conds = all_init_conds
+            time_plus_half_dt = tf.add(time, self.dt/2)
 
-            all_osc_stepsi, all_conn_steps = [self.odeRK4(self.zfun, time, self.dt, osc_init_conds, M.layers[iosc].params)
-                                                [self.odeRK4(self.cfun, time, self.dt, conn_init_conds, M.layers[iconn].params)
-                                                    for iconn, conn_init_conds in enumerate(all_conn_init_conds[ilayer])]
-                                                for iosc, osc_init_conds in enumerate(all_osc_init_conds)]  
-            all_conn_steps = [self.odeRK4(self.cfun, time, self.dt, conn_init_conds) for conn_init_conds in all_conn_init_conds]  
+            all_layers_state, all_conns_state = all_init_conds
 
-            return all_osc_steps, all_conn_steps
+            all_layers_k1 = [self.zfun(time, layer_state, M.layers[ilayer].params) for ilayer, layer_state in enumerate(all_layers_state)]
+            all_conns_k1 = [[self.cfun(time, conn_state, M.layers[ilayer].connections[iconn].params) 
+                                for iconn, conn_state in enumerate(all_conns_state[ilayer])] 
+                            for ilayer in range(len(all_layers_state))]
+            all_layers_k2 = [self.zfun(time_plus_half_dt, tf.add(layer_state, tf.scalar_mul(self.dt, layer_k1/2)), M.layers[ilayer].params) 
+                            for ilayer, (layer_state, layer_k1) in enumerate(zip(all_layers_state, all_layers_k1))]
+            all_conns_k2 = [[self.cfun(time_plus_half_dt, tf.add(conn_state, tf.scalar_mul(self.dt, conn_k1/2)), M.layers[ilayer].connections[iconn].params) 
+                                for iconn, (conn_state, conn_k1) in enumerate(zip(all_conns_state[ilayer], all_conns_k1[ilayer]))] 
+                            for ilayer in range(len(all_layers_state))]
+            all_layers_k3 = [self.zfun(time_plus_half_dt, tf.add(layer_state, tf.scalar_mul(self.dt, layer_k2/2)), M.layers[ilayer].params) 
+                            for ilayer, (layer_state, layer_k2) in enumerate(zip(all_layers_state, all_layers_k2))]
+            all_conns_k3 = [[self.cfun(time_plus_half_dt, tf.add(conn_state, tf.scalar_mul(self.dt, conn_k2/2)), M.layers[ilayer].connections[iconn].params) 
+                                for iconn, (conn_state, conn_k2) in enumerate(zip(all_conns_state[ilayer], all_conns_k2[ilayer]))] 
+                            for ilayer in range(len(all_layers_state))]
+            all_layers_k4 = [self.zfun(tf.add(time, self.dt), tf.add(layer_state, tf.scalar_mul(self.dt, layer_k3)), M.layers[ilayer].params) 
+                            for ilayer, (layer_state, layer_k3) in enumerate(zip(all_layers_state, all_layers_k3))]
+            all_conns_k4 = [[self.cfun(tf.add(time, self.dt), tf.add(conn_state, tf.scalar_mul(self.dt, conn_k3)), M.layers[ilayer].connections[iconn].params) 
+                                for iconn, (conn_state, conn_k3) in enumerate(zip(all_conns_state[ilayer], all_conns_k3[ilayer]))] 
+                            for ilayer in range(len(all_layers_state))]
+            all_layers_state = [tf.add(layer_state, tf.divide(tf.add_n([layer_k1, tf.scalar_mul(2, layer_k2), tf.scalar_mul(2, layer_k3), layer_k4]), 6))
+                                for layer_state, layer_k1, layer_k2, layer_k3, layer_k4 
+                                    in zip(all_layers_state, all_layers_k1, all_layers_k2, all_layers_k3, all_layers_k4)] 
+            all_conns_state = [[tf.add(conn_state, tf.divide(tf.add_n([conn_k1, tf.scalar_mul(2, conn_k2), tf.scalar_mul(2, conn_k3), conn_k4]), 6))
+                                    for conn_state, conn_k1, conn_k2, conn_k3, conn_k4 
+                                        in zip(all_conns_state[ilayer], all_conns_k1[ilayer], all_conns_k2[ilayer], all_conns_k3[ilayer], all_conns_k4[ilayer])]
+                                for ilayer in range(len(all_layers_state))]
 
-        all_osc_and_conn_steps = tf.scan(scan_func, time, (all_osc_init_conds, all_conn_init_conds))
+            return all_layers_state, all_conns_state
+
+        all_layers_steps, all_conns_steps = tf.scan(odeRK4, time, (all_layers_initconds, all_conns_initconds))
         
-        all_osc_steps, all_conn_steps = all_osc_and_conn_steps
-
-        for ilayer in len(self.layers):
-            self.layers[ilayer].savedStates = all_osc_steps[ilayer]
-            for iconn in len(self.layers[ilayer].connections):
-                self.layers[ilayer].connections[iconn].savedStates = all_conn_steps[ilayer,iconn]
-
-    def odeRK4(self, func, time, dt, state, params):
-
-        t_half_dt = tf.add(time,dt/2)
-
-        k1 = func(t, state, params)
-        k2 = func(t_half_dt, tf.add(state, tf.scalar_mul(dt,k1/2)), params)
-        k3 = func(t_half_dt, tf.add(state, tf.scalar_mul(dt,k2/2)), params)
-        k4 = func(tf.add(t, d), tf.add(state, tf.scalar_mul(dt,k3)), params)
-
-        state = state + tf.scalar_mul(dt, tf.add_n([k1, 2*k2, 2*k3, k4])/6)
-
-        return state
+        for ilayer in range(len(self.layers)):
+            self.layers[ilayer].saved_states = all_layers_steps[ilayer]
+            for iconn in range(len(self.layers[ilayer].connections)):
+                self.layers[ilayer].connections[iconn].saved_states = all_conns_steps[ilayer][iconn]
 
