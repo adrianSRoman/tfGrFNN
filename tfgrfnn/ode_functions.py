@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import tfgrfnn as tg
 
-def xdot_ydot(t, t_idx, xt_yt, connections, alpha=None, beta1=None, beta2=None, epsilon=None, freqs= None, ones=None):
+def xdot_ydot(t, tidx, xt_yt, conns_source_state, conns_matrix, connections, alpha=None, beta1=None, beta2=None, epsilon=None, freqs= None, ones=None):
 
     omega = tf.constant(2*np.pi, dtype=tf.float64)
 
@@ -13,9 +13,7 @@ def xdot_ydot(t, t_idx, xt_yt, connections, alpha=None, beta1=None, beta2=None, 
                         tf.pow(yt, 2))
     x2tplusy2t_x2tplusy2t = tf.concat([x2tplusy2t, 
                                 x2tplusy2t], axis=0)
-    x2tplusy2tsquared = tf.pow(x2tplusy2t, 2)
-    x2tplusy2tsquared_x2tplusy2tsquared = tf.concat([x2tplusy2tsquared, 
-                                x2tplusy2tsquared], axis=0)
+    x2tplusy2tsquared_x2tplusy2tsquared = tf.pow(x2tplusy2t_x2tplusy2t, 2)
 
     xtnew_ytnew = tf.add_n([
                             tf.scalar_mul(alpha, xt_yt),
@@ -24,48 +22,53 @@ def xdot_ydot(t, t_idx, xt_yt, connections, alpha=None, beta1=None, beta2=None, 
                             tf.divide(
                                 tf.scalar_mul(tf.multiply(epsilon, beta2), 
                                     tf.multiply(xt_yt, x2tplusy2tsquared_x2tplusy2tsquared)),
-                                tf.subtract(ones, 
+                                tf.subtract(tf.constant(1.0, dtype=tf.float64), 
                                     tf.scalar_mul(epsilon, x2tplusy2t_x2tplusy2t)))
                             ])
 
-    if connections == None:
-        dxdt_dydt = tf.multiply(freqs, xtnew_ytnew)
-    else:
-        csrt_csit = tf.add_n([compute_inputs(t_idx, conn) for conn in connections])
-        dxdt_dydt = tf.multiply(freqs, tf.add(xtnew_ytnew, csrt_csit))
-
+    csrt_csit = tf.add_n([compute_input(tidx, conns_source_state[iconn], conns_matrix[iconn], conn) for iconn, conn in enumerate(connections)])
+        
+    dxdt_dydt = tf.multiply(freqs, tf.add(xtnew_ytnew, csrt_csit))
+    
     return dxdt_dydt
 
-def compute_inputs(time_index, conn):
 
-    if isinstance(conn.source, tg.oscillators):
-        conn_type, srt_sit, crt_cit, params = conn.type, conn.source.state, conn.matrix, conn.params
-    else: 
-        if isinstance(time_index, int):
-            conn_type, srt_sit, crt_cit, params = conn.type, conn.source.state[time_index], conn.matrix, conn.params
-        else:
-            conn_type, srtm1_sitm1, srtp1_sitp1, crt_cit, params = conn.type, conn.source.state[int(time_index-0.5)], conn.source.state[int(time_index+0.5)], conn.matrix, conn.params
-            srt_sit = srtm1_sitm1*0.5 + srtp1_sitp1*0.5
+def compute_input(time_index, conn_source_state, conn_matrix, conn):
 
-    srt, sit = tf.split(srt_sit, 2, axis=0)
-    crt, cit = tf.split(crt_cit, 2, axis=0)
+    #if isinstance(conn.source, tg.oscillators):
+    #    conn_type, srt_sit, crt_cit, params = conn.type, conn.source.state, conn.matrix, conn.params
+    #else: 
+    #    if isinstance(time_index, int):
+    #        conn_type, srt_sit, crt_cit, params = conn.type, conn.source.state[time_index], conn.matrix, conn.params
+    #    else:
+    #        conn_type, srtm1_sitm1, srtp1_sitp1, crt_cit, params = conn.type, conn.source.state[int(time_index-0.5)], conn.source.state[int(time_index+0.5)], conn.matrix, conn.params
+    #        srt_sit = srtm1_sitm1*0.5 + srtp1_sitp1*0.5
 
-    csrt_csit = tf.switch_case(conn_type, 
+    def compute_input_1freq(srt_sit=conn_source_state, crt_cit=conn_matrix):
+
+        srt_sit = tf.expand_dims(srt_sit, -1)
+        srt, sit = tf.split(srt_sit, 2, axis=0)
+        crt, cit = tf.split(crt_cit, 2, axis=0)
+        csrt = tf.matmul(crt, srt)
+        csit = tf.matmul(cit, sit)
+
+        csrt_csit = tf.squeeze(tf.concat([csrt, csit], axis=0))
+
+        return csrt_csit 
+
+    def compute_input_null(conn=conn):
+
+        return tf.constant(0, dtype=tf.float64, shape=(conn.target.nosc,))
+
+    csrt_csit = tf.switch_case(conn.typeint, 
                             branch_fns={
-                                        0: compute_input_1freq(crt, cit, srt, sit)
+                                        #0: lambda: tf.constant(0, dtype=tf.float64, shape=(conn.target.initconds.shape)),
+                                        0: compute_input_null,
+                                        1: compute_input_1freq
                                         }
                             )
 
     return csrt_csit
-
-def compute_input_1freq(cr, ci, srt, sit):
-
-    csrt = tf.matmul(cr, srt)
-    csit = tf.matmul(ci, srt)
-
-    csrt_csit = tf.concat([csrt, csit], axis=0)
-
-    return csrt_csit 
 
 def crdot_cidot(crt_cit, lrn_type, lambda_, mu1, mu2, kappa, xst_yst, xtt_ytt, freqss, freqst):
 
