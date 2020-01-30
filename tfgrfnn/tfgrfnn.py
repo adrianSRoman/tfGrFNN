@@ -32,8 +32,8 @@ class oscillators():
         self.params['freqs'] = tf.constant(self.freqs, dtype=tf.float64)
         self.params['ones'] = tf.constant(1, dtype=tf.float64, shape=(self.nosc,))
         if initconds == None:
-            self.initconds = tf.constant(0, dtype=tf.float64, shape=(self.nosc,))
-            self.currstep = tf.constant(0, dtype=tf.float64, shape=(self.nosc,))
+            self.initconds = tf.constant(0.1, dtype=tf.float64, shape=(self.nosc,))
+            self.currstep = tf.constant(0.1, dtype=tf.float64, shape=(self.nosc,))
         else:
             self.initconds = tf.constant(initconds)
             self.currstep = tf.constant(initconds)
@@ -90,13 +90,13 @@ class Model():
                 layer.currstep = tf.concat([tf.math.real(layer.currstep), tf.math.imag(layer.currstep)], axis=0)
         for layer in self.layers:
             if layer.savesteps:
-                layer.allsteps = tf.constant(0, shape=(layer.currstep.shape[0], self.time.shape[0]))
+                layer.allsteps = []
 
     @tf.function
     def integrate(self):
 
-        def odeRK4(t_idx):
-
+        def odeRK4(self, t_idx):
+    
             t = self.time[t_idx] 
             t_plus_half_dt = tf.add(t, self.half_dt)
             t_plus_dt = tf.add(t, self.dt)
@@ -133,8 +133,8 @@ class Model():
                                     tf.scalar_mul(self.dt/6, tf.add_n([layer.k1, 
                                                                         tf.scalar_mul(2, layer.k2), 
                                                                         tf.scalar_mul(2, layer.k3), 
-                                                                        layer_k4])))
-                layer.allsteps[:,t_idx] = layer.curr_step
+                                                                        layer.k4])))
+                tf.print(layer.currstep)
                 if layer.connections != None:
                     for conn in layer.connections:
                         conn.k4 = self.cfun(t_plus_dt, conn.matrix, conn.params) 
@@ -144,11 +144,7 @@ class Model():
                                                                                 tf.scalar_mul(2, conn.k3), 
                                                                                 conn.k4])))
 
-            return t_idx + 1
+            return self, tf.add(t_idx, 1)
 
         t_idx = tf.constant(0)
-        tf.while_loop(lambda t_idx :tf.less(t_idx, len(self.time)), odeRK4(t_idx), t_idx)
-        if self.zfun == xdot_ydot:
-            for layer in self.layers:
-                x, y = tf.split(layer.allsteps, 2, axis=0)
-                layer.allsteps = x + 1j*y
+        tf.while_loop(lambda t_idx: tf.less(t_idx, len(self.time)), odeRK4, [self, t_idx])
