@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import tfgrfnn as tg
 
-def xdot_ydot(t, tidx, xt_yt, conns_source_state, conns_matrix, connections, alpha=None, beta1=None, beta2=None, epsilon=None, freqs= None, ones=None):
+def xdot_ydot(t, tidx, xt_yt, conns_source_state_and_matrix, connections, alpha=None, beta1=None, beta2=None, epsilon=None, freqs= None, ones=None):
 
     omega = tf.constant(2*np.pi, dtype=tf.float64)
 
@@ -26,14 +26,17 @@ def xdot_ydot(t, tidx, xt_yt, conns_source_state, conns_matrix, connections, alp
                                     tf.scalar_mul(epsilon, x2tplusy2t_x2tplusy2t)))
                             ])
 
-    csrt_csit = tf.add_n([compute_input(tidx, conns_source_state[iconn], conns_matrix[iconn], conn) for iconn, conn in enumerate(connections)])
+    csrt_csit = tf.add_n([compute_input(tidx, conns_source_state_and_matrix[iconn], conn) for iconn, conn in enumerate(connections)])
         
     dxdt_dydt = tf.multiply(freqs, tf.add(xtnew_ytnew, csrt_csit))
     
     return dxdt_dydt
 
 
-def compute_input(time_index, conn_source_state, conn_matrix, conn):
+def compute_input(time_index, conn_source_state_and_matrix, conn):
+
+    conn_source_state = conn_source_state_and_matrix[0]
+    conn_matrix = conn_source_state_and_matrix[1]
 
     #if isinstance(conn.source, tg.oscillators):
     #    conn_type, srt_sit, crt_cit, params = conn.type, conn.source.state, conn.matrix, conn.params

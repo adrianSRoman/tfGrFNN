@@ -94,17 +94,12 @@ class Model():
         #    if layer.savesteps:
         #        layer.allsteps = []
         self.all_layers_init_conds = [layer.initconds for layer in self.layers]
-        self.all_conns_init_conds = [[[],[]]] * len(self.layers)
-        for ilayer, layer in enumerate(self.layers):
-            for conn in layer.connections:
-                self.all_conns_init_conds[ilayer][0].append(conn.source.initconds)
-                self.all_conns_init_conds[ilayer][1].append(conn.matrix)
-
+        self.all_conns_init_conds = [[[conn.source.initconds, conn.matrix] for conn in layer.connections] for layer in self.layers]
 
     @tf.function
     def integrate(self):
 
-        def odeRK4(t_idx, all_states):
+        def odeRK4(all_states, t_idx):
 
             t = self.time[t_idx] 
             t_plus_half_dt = tf.add(t, self.half_dt)
@@ -114,32 +109,28 @@ class Model():
 
             all_layers_k1 = [self.zfun(t, t_idx, 
                                 all_layers_state[ilayer], 
-                                all_conns_state[ilayer][0], 
-                                all_conns_state[ilayer][1], 
+                                all_conns_state[ilayer], 
                                 self.layers[ilayer].connections, 
                                 **self.layers[ilayer].params) 
                             for ilayer in range(len(all_layers_state))]
 
             all_layers_k2 = [self.zfun(t_plus_half_dt, tf.add(tf.cast(t_idx, dtype=tf.float64),0.5), 
                                 tf.add(all_layers_state[ilayer], tf.scalar_mul(self.dt, all_layers_k1[ilayer])),
-                                all_conns_state[ilayer][0], 
-                                all_conns_state[ilayer][1], 
+                                all_conns_state[ilayer], 
                                 self.layers[ilayer].connections, 
                                 **self.layers[ilayer].params) 
                             for ilayer in range(len(all_layers_state))]
 
             all_layers_k3 = [self.zfun(t_plus_half_dt, tf.add(tf.cast(t_idx, dtype=tf.float64),0.5), 
                                 tf.add(all_layers_state[ilayer], tf.scalar_mul(self.dt, all_layers_k2[ilayer])),
-                                all_conns_state[ilayer][0], 
-                                all_conns_state[ilayer][1], 
+                                all_conns_state[ilayer], 
                                 self.layers[ilayer].connections, 
                                 **self.layers[ilayer].params) 
                             for ilayer in range(len(all_layers_state))]
 
             all_layers_k4 = [self.zfun(t_plus_dt, tf.add(t_idx, 1), 
                                 tf.add(all_layers_state[ilayer], tf.scalar_mul(self.dt, all_layers_k2[ilayer])),
-                                all_conns_state[ilayer][0], 
-                                all_conns_state[ilayer][1], 
+                                all_conns_state[ilayer], 
                                 self.layers[ilayer].connections, 
                                 **self.layers[ilayer].params) 
                             for ilayer in range(len(all_layers_state))]
@@ -152,55 +143,17 @@ class Model():
                                 for ilayer in range(len(all_layers_state))]
 
 
-            return tf.add(t_idx,1), [all_layers_state, all_conns_state]
+            #all_conns_state = [[[tf.add(all_conns_state[ilayer][iconn][0], 1), tf.add(all_conns_state[ilayer][iconn][1],1)]
+            #                        for iconn in range(len(all_conns_state[ilayer]))] 
+            #                    for ilayer in range(len(all_layers_state))]
 
-            '''
-            for layer in self.layers:
-                layer.k0 = layer.currstep
-                layer.k1 = self.zfun(t, t_idx, layer.currstep, layer.connections, **layer.params)
-                layer.currstep = tf.add(layer.currstep, tf.scalar_mul(self.dt, layer.k1/2))
-                if layer.connections != None:
-                    for conn in layer.connections:
-                        conn.k0 = conn.matrix
-                        conn.k1 = self.cfun(t, conn.matrix, conn.params) 
-                        conn.matrix = tf.add(conn.matrix, tf.scalar_mul(self.dt, conn.k1/2))
+            return [all_layers_state, all_conns_state]
 
-            for layer in self.layers:
-                layer.k2 = self.zfun(t_plus_half_dt, tf.cast(t_idx, dtype=tf.float64)+0.5, layer.currstep, layer.connections, **layer.params)
-                layer.currstep = tf.add(layer.currstep, tf.scalar_mul(self.dt, layer.k2/2))
-                if layer.connections != None:
-                    for conn in layer.connections:
-                        conn.k2 = self.cfun(t_plust_half_dt, conn.matrix, conn.params) 
-                        conn.matrix = tf.add(conn.matrix, tf.scalar_mul(self.dt, conn.k2/2))
-
-            for layer in self.layers:
-                layer.k3 = self.zfun(t_plus_half_dt, tf.cast(t_idx, dtype=tf.float64)+0.5, layer.currstep, layer.connections, **layer.params)
-                layer.currstep = tf.add(layer.currstep, tf.scalar_mul(self.dt, layer.k3))
-                if layer.connections != None:
-                    for conn in layer.connections:
-                        conn.k3 = self.cfun(t_plus_half_dt, conn.matrix, conn.params) 
-                        conn.matrix = tf.add(conn.matrix, tf.scalar_mul(self.dt, conn.k3))
-            
-            for layer in self.layers:
-                layer.k4 = self.zfun(t_plus_dt, t_idx+1, layer.currstep, layer.connections, **layer.params)
-                layer.currstep = tf.add(layer.k0, 
-                                    tf.scalar_mul(self.dt/6, tf.add_n([layer.k1, 
-                                                                        tf.scalar_mul(2, layer.k2), 
-                                                                        tf.scalar_mul(2, layer.k3), 
-                                                                        layer.k4])))
-                tf.print(layer.currstep)
-                if layer.connections != None:
-                    for conn in layer.connections:
-                        conn.k4 = self.cfun(t_plus_dt, conn.matrix, conn.params) 
-                        conn.matrix = tf.add(conn.k0, 
-                                            tf.scalar_mul(self.dt/6, tf.add_n([conn.k1, 
-                                                                                tf.scalar_mul(2, conn.k2), 
-                                                                                tf.scalar_mul(2, conn.k3), 
-                                                                                conn.k4])))
-
-            return tf.add(t_idx, 1)
-            '''
-
-        t_idx = tf.constant(0)
         all_states = [self.all_layers_init_conds, self.all_conns_init_conds]
-        tf.while_loop(lambda t_idx, all_states: tf.less(t_idx, len(self.time)), odeRK4, [t_idx, all_states])
+        x = tf.scan(odeRK4, tf.range(5), all_states)
+        tf.print(len(x))
+        tf.print(len(x[0]))
+        tf.print(len(x[1]))
+        tf.print(len(x[0][0]))
+        tf.print(len(x[1][0]))
+        tf.print(len(x[1][0][0][0]))
