@@ -3,8 +3,9 @@ import tensorflow as tf
 import time
 
 from oscillator_types import canonical_hopf
-from connection_learning_rule_types import phase_lock 
+from connection_learning_types import learn_1freq 
 from ode_functions import xdot_ydot, crdot_cidot
+
 
 class oscillators():
 
@@ -33,37 +34,70 @@ class oscillators():
         self.params['freqs'] = tf.constant(self.freqs, dtype=tf.float64)
         self.params['ones'] = tf.constant(1, dtype=tf.float64, shape=(self.nosc,))
         if initconds == None:
-            self.initconds = tf.constant(0.9, dtype=tf.complex128, shape=(self.nosc,))
+            self.initconds = tf.constant(0.99, dtype=tf.complex128, shape=(self.nosc,))
         else:
             self.initconds = tf.constant(initconds)
         self.savesteps = savesteps
-        self.connections = [connection(typestr='null', source=self, target=self)]
+        self.connections = [connection(learntypestr='null', source=self, target=self)]
 
     def __repr__(self):
         return "<Layer with %s %s oscillators and %s connections>" % (self.nosc, self.osctype, len(self.connections))
+
+
+class stimulus():
+
+    def __init__(self, name='', 
+                    values = tf.constant(0, dtype=tf.complex128, shape=(1,1)),
+                    fs = tf.constant(1.0)):
+
+        self.values = values
+        self.shape = tf.shape(self.values)
+        self.nchannels = self.shape[0]
+        self.ntime = self.shape[1]
+        self.fs = fs
+        self.dt = 1.0/self.fs
+        self.initconds = self.values[:,0]
+
 
 class connection():
 
     def __init__(self, name = '', 
                     source = None,
                     target = None,
-                    typestr = None,
-                    learn = False,
-                    complex_ = True,
+                    learn = True,
+                    learntypestr = None,
+                    learnparams = None,
                     savesteps = True):
 
         self.name = name
         self.source = source
         self.target = target
-        self.typestr = typestr
-        if self.typestr == 'null' :
-            self.typeint = tf.constant(0)
-            self.matrix = tf.constant(0, dtype=tf.complex128, shape=(self.target.nosc,self.source.nosc))
+        self.learn = learn
+        self.learntypestr = learntypestr
+        self.learnparams = learnparams
         self.savesteps = savesteps
+        if self.learntypestr == 'null':
+            self.typeint = tf.constant(0)
+            self.matrix = tf.constant(0, dtype=tf.complex128, shape=(1, self.source.nosc))
+            self.learnparams = {}
+        elif self.learntypestr == '1freq' and isinstance(self.source, stimulus):
+            self.typeint = tf.constant(1)
+            self.matrix = tf.complex(tf.random.normal(shape=(self.target.nosc, self.source.nchannels), dtype=tf.float64),
+                                    tf.random.normal(shape=(self.target.nosc, self.source.nchannels), dtype=tf.float64))
+            self.learnparams['sfreqs'] = self.target.freqs
+            self.learnparams['tfreqs'] = self.target.freqs
+        elif self.learntypestr == '1freq' and isinstance(self.source, oscillators):
+            self.typeint = tf.constant(1)
+            self.matrix = tf.complex(tf.random.normal(shape=(self.target.nosc, self.source.nosc), dtype=tf.float64),
+                                    tf.random.normal(shape=(self.target.nosc, self.source.nosc), dtype=tf.float64))
+            self.learnparams['sfreqs'] = self.source.freqs
+            self.learnparams['tfreqs'] = self.target.freqs
 
-def connect(source = None, target = None, conn_matrix = None, conn_type = None,
-        learn = True, ): 
-    target.connections.append(conn_matrix) 
+
+def connect(source=None, target=None, learn=True, learntype=None, learnparams=None):
+
+    conn = connection(source=source, target=target, learn=learn, learntypestr=learntype, learnparams=learnparams)
+    target.connections.append(conn) 
 
     return target
        
@@ -72,12 +106,14 @@ class Model():
 
     def __init__(self, name = '',
                     layers = None,
+                    stimuli = [stimulus()],
                     zfun = xdot_ydot,
                     cfun = crdot_cidot,
                     time = tf.range(1, delta = 0.01, dtype = tf.float64),
                     dt = tf.constant(0.01, dtype=tf.float64)):
 
         self.layers = layers
+        self.stimuli = stimuli
         self.time = time
         self.zfun = zfun
         self.cfun = cfun
@@ -149,17 +185,22 @@ class Model():
                 layer.nosc = layer.nosc*2
                 for conn in layer.connections:
                     conn.matrix = tf.concat([tf.math.real(conn.matrix), tf.math.imag(conn.matrix)], axis=0)
+            for stim in self.stimuli:
+                stim.values = tf.concat([tf.math.real(stim.values), tf.math.imag(stim.values)], axis=0)
+                stim.initconds = tf.concat([tf.math.real(stim.initconds), tf.math.imag(stim.initconds)], axis=0)
         self.all_layers_init_conds = [layer.initconds for layer in self.layers]
         self.all_conns_init_conds = [[[conn.source.initconds, conn.matrix] for conn in layer.connections] for layer in self.layers]
 
-        t = time.time()
         all_layers_steps, all_conns_steps = self.odeRK4()
-        elapsed = time.time()-t
-        print(elapsed)
 
         del self.all_layers_init_conds
         del self.all_conns_init_conds
         if self.zfun == xdot_ydot:
+            for stim in self.stimuli:
+                stim_values_real, stim_values_imag = tf.split(stim.values, 2, axis=0)
+                stim.values = tf.complex(stim_values_real, stim_values_imag)
+                stim_initconds_real, stim_initconds_imag = tf.split(stim.initconds, 2, axis=0)
+                stim.initconds = tf.complex(stim_initconds_real, stim_initconds_imag)
             for ilayer, layer in enumerate(self.layers):
                 layer.params['ones'], _ = tf.split(layer.params['ones'], 2, axis=0)
                 layer.params['freqs'], _ = tf.split(layer.params['freqs'], 2, axis=0)

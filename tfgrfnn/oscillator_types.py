@@ -11,11 +11,11 @@ class canonical_hopf():
         self.epsilon = tf.constant(epsilon, dtype=tf.float64)
 
     def params(self):
-        params_dict = {'alpha': self.alpha, 
+        paramsdict = {'alpha': self.alpha, 
                         'beta1': self.beta1, 
                         'beta2': self.beta2, 
                         'epsilon': self.epsilon}
-        return params_dict
+        return paramsdict
 
     def __repr__(self):
 
