@@ -14,8 +14,7 @@ class oscillators():
                     nosc = 256,
                     freqlims = (0.12, 8.0),
                     freqspacing = 'log',
-                    initconds = None,
-                    savesteps = True):
+                    initconds = None):
 
         self.name = name
         self.osctype = osctype
@@ -32,13 +31,13 @@ class oscillators():
                             self.nosc)
         self.params = self.osctype.params()
         self.params['freqs'] = tf.constant(self.freqs, dtype=tf.float64)
-        self.params['ones'] = tf.constant(1, dtype=tf.float64, shape=(self.nosc,))
         if initconds == None:
             self.initconds = tf.constant(0.99, dtype=tf.complex128, shape=(self.nosc,))
+            self.currstate = self.initconds
         else:
             self.initconds = tf.constant(initconds)
-        self.savesteps = savesteps
-        self.connections = [connection(learntypestr='null', source=self, target=self)]
+            self.currstate = self.initconds
+        self.connections = [connection(source=self, target=self, learnparams={'learntype':'null'})]
 
     def __repr__(self):
         return "<Layer with %s %s oscillators and %s connections>" % (self.nosc, self.osctype, len(self.connections))
@@ -57,6 +56,10 @@ class stimulus():
         self.fs = fs
         self.dt = 1.0/self.fs
         self.initconds = self.values[:,0]
+        if tf.shape(self.values)[1] == 1:
+            self.stimtype = 'null'
+        else:
+            self.stimtype = 'values'
 
 
 class connection():
@@ -64,39 +67,31 @@ class connection():
     def __init__(self, name = '', 
                     source = None,
                     target = None,
-                    learn = True,
-                    learntypestr = None,
-                    learnparams = None,
-                    savesteps = True):
+                    learnparams = {'learntype':'null'}):
 
         self.name = name
         self.source = source
         self.target = target
-        self.learn = learn
-        self.learntypestr = learntypestr
         self.learnparams = learnparams
-        self.savesteps = savesteps
-        if self.learntypestr == 'null':
+        if self.learnparams['learntype'] == 'null':
             self.typeint = tf.constant(0)
             self.matrix = tf.constant(0, dtype=tf.complex128, shape=(1, self.source.nosc))
             self.learnparams = {}
-        elif self.learntypestr == '1freq' and isinstance(self.source, stimulus):
-            self.typeint = tf.constant(1)
+        elif self.learnparams['learntype'] == '1freq' and isinstance(self.source, stimulus):
             self.matrix = tf.complex(tf.random.normal(shape=(self.target.nosc, self.source.nchannels), dtype=tf.float64),
                                     tf.random.normal(shape=(self.target.nosc, self.source.nchannels), dtype=tf.float64))
-            self.learnparams['sfreqs'] = self.target.freqs
-            self.learnparams['tfreqs'] = self.target.freqs
-        elif self.learntypestr == '1freq' and isinstance(self.source, oscillators):
-            self.typeint = tf.constant(1)
+            self.learnparams['freqss'] = self.target.freqs
+            self.learnparams['freqst'] = self.target.freqs
+        elif self.learnparams['learntype'] == '1freq' and isinstance(self.source, oscillators):
             self.matrix = tf.complex(tf.random.normal(shape=(self.target.nosc, self.source.nosc), dtype=tf.float64),
                                     tf.random.normal(shape=(self.target.nosc, self.source.nosc), dtype=tf.float64))
-            self.learnparams['sfreqs'] = self.source.freqs
-            self.learnparams['tfreqs'] = self.target.freqs
+            self.learnparams['freqss'] = self.source.freqs
+            self.learnparams['freqst'] = self.target.freqs
 
 
-def connect(source=None, target=None, learn=True, learntype=None, learnparams=None):
+def connect(source=None, target=None, learnparams={'learntype':'null'}):
 
-    conn = connection(source=source, target=target, learn=learn, learntypestr=learntype, learnparams=learnparams)
+    conn = connection(source=source, target=target, learnparams=learnparams)
     target.connections.append(conn) 
 
     return target
@@ -119,59 +114,100 @@ class Model():
         self.cfun = cfun
         self.dt = dt
         self.half_dt = dt/2
+        for layer in self.layers:
+            layer.allsteps = tf.constant(0.0, 
+                                        dtype=tf.float64, 
+                                        shape=(tf.shape(layer.initconds)[0], tf.shape(time)[0]))
+            for conn in layer.connections:
+                conn.matrix = tf.constant(0.0, 
+                                        dtype=tf.float64, 
+                                        shape=(tf.shape(conn.matrix)[0], 
+                                            tf.shape(conn.matrix)[1], 
+                                            tf.shape(time)[0]))
 
     @tf.function
     def odeRK4(self):
 
-        def scan_fun(all_states, t_idx):
+        def RK(t_idx):
 
             t = self.time[t_idx] 
             t_plus_half_dt = tf.add(t, self.half_dt)
             t_plus_dt = tf.add(t, self.dt)
-            
-            all_layers_state, all_conns_state = all_states
+           
+            for layer in self.layers:
+                layer.k0 = layer.currstate
+                layer.k1 = self.zfun(t, t_idx, 
+                                layer.currstate,
+                                layer.connections,
+                                **layer.params) 
+                for conn in layer.connections:
+                    conn.matrix_k0 = conn.matrix
+                    conn.matrix_k1 = self.cfun(t, t_idx,
+                                            conn.source.currstate,
+                                            conn.matrix,
+                                            conn.target.currstate,
+                                            conn.learnparams)
+            for layer in self.layers:
+                layer.currstate = tf.add(layer.k0, tf.scalar_mul(self.half_dt, layer_k1))
+                for conn in layer.connections:
+                    conn.matrix = tf.add(conn.matrix_k0, tf.scalar_mul(self.half_dt, conn.matrix_k1))
 
-            all_layers_k1 = [self.zfun(t, t_idx, 
-                                all_layers_state[ilayer], 
-                                all_conns_state[ilayer], 
-                                self.layers[ilayer].connections, 
-                                **self.layers[ilayer].params) 
-                            for ilayer in range(len(all_layers_state))]
+            for layer in self.layers:
+                layer.k2 = self.zfun(t_plus_half_dt, tf.add(tf.cas(t_idx, dtype=tf.float64), 0.5), 
+                                layer.currstate,
+                                layer.connections,
+                                **layer.params) 
+                for conn in layer.connections:
+                    conn.matrix_k1 = self.cfun(t_plus_half_dt, tf.add(tf.cas(t_idx, dtype=tf.float64), 0.5), 
+                                            conn.source.currstate,
+                                            conn.matrix,
+                                            conn.target.currstate,
+                                            conn.learnparams)
+            for layer in self.layers:
+                layer.currstate = tf.add(layer.k0, tf.scalar_mul(self.half_dt, layer_k2))
+                for conn in layer.connections:
+                    conn.matrix = tf.add(conn.matrix_k0, tf.scalar_mul(self.half_dt, conn.matrix_k2))
 
-            all_layers_k2 = [self.zfun(t_plus_half_dt, tf.add(tf.cast(t_idx, dtype=tf.float64),0.5), 
-                                tf.add(all_layers_state[ilayer], tf.scalar_mul(self.half_dt, all_layers_k1[ilayer])),
-                                all_conns_state[ilayer], 
-                                self.layers[ilayer].connections, 
-                                **self.layers[ilayer].params) 
-                            for ilayer in range(len(all_layers_state))]
+            for layer in self.layers:
+                layer.k3 = self.zfun(t_plus_half_dt, tf.add(tf.cas(t_idx, dtype=tf.float64), 0.5), 
+                                layer.currstate,
+                                layer.connections,
+                                **layer.params) 
+                for conn in layer.connections:
+                    conn.matrix_k1 = self.cfun(t_plus_half_dt, tf.add(tf.cas(t_idx, dtype=tf.float64), 0.5), 
+                                            conn.source.currstate,
+                                            conn.matrix,
+                                            conn.target.currstate,
+                                            conn.learnparams)
+            for layer in self.layers:
+                layer.currstate = tf.add(layer.k0, layer_k3)
+                for conn in layer.connections:
+                    conn.matrix = tf.add(conn.matrix_k0, conn.matrix_k3)
 
-            all_layers_k3 = [self.zfun(t_plus_half_dt, tf.add(tf.cast(t_idx, dtype=tf.float64),0.5), 
-                                tf.add(all_layers_state[ilayer], tf.scalar_mul(self.half_dt, all_layers_k2[ilayer])),
-                                all_conns_state[ilayer], 
-                                self.layers[ilayer].connections, 
-                                **self.layers[ilayer].params) 
-                            for ilayer in range(len(all_layers_state))]
+            for layer in self.layers:
+                layer.k4 = self.zfun(t_plus_dt, tf.add(t_idx, 1), 
+                                layer.currstate,
+                                layer.connections,
+                                **layer.params) 
+                for conn in layer.connections:
+                    conn.matrix_k4 = self.cfun(t_plus_dt, tf.add(t_idx, 1), 
+                                            conn.source.currstate,
+                                            conn.matrix,
+                                            conn.target.currstate,
+                                            conn.learnparams)
 
-            all_layers_k4 = [self.zfun(t_plus_dt, tf.add(t_idx, 1), 
-                                tf.add(all_layers_state[ilayer], tf.scalar_mul(self.dt, all_layers_k3[ilayer])),
-                                all_conns_state[ilayer], 
-                                self.layers[ilayer].connections, 
-                                **self.layers[ilayer].params) 
-                            for ilayer in range(len(all_layers_state))]
+            for layer in self.layers:
+                layer.currstate = tf.add(layer.k0, 
+                                    tf.scalar_mul(tf.divide(self.dt, 6),
+                                        tf.add_n(layer.k1, 
+                                                    tf.scalar_mul(2, layer.k2),
+                                                    tf.scalar_mul(2, layer.k3),
+                                                    layer.k4)))
 
-            all_layers_state = [tf.add(all_layers_state[ilayer],
-                                    tf.scalar_mul(tf.divide(self.dt, 6), 
-                                        tf.add_n([all_layers_k1[ilayer],
-                                                    tf.scalar_mul(2, all_layers_k2[ilayer]),
-                                                    tf.scalar_mul(2, all_layers_k3[ilayer]),
-                                                    all_layers_k4[ilayer]])))
-                                for ilayer in range(len(all_layers_state))]
+            return tf.add(t_idx, 1)
 
-
-            return [all_layers_state, all_conns_state]
-
-        all_states = [self.all_layers_init_conds, self.all_conns_init_conds]
-        all_layers_steps, all_conns_steps = tf.scan(scan_fun, tf.range(len(self.time)), all_states)
+        t_idx = 0
+        tf.while_loop(lambda t_idx: tf.less(t_idx,tf.shape(self.time)), RK, [t_idx])
         
         return all_layers_steps, all_conns_steps
 
@@ -179,35 +215,31 @@ class Model():
 
         if self.zfun == xdot_ydot:
             for layer in self.layers:
-                layer.params['ones'] = tf.concat([layer.params['ones'], layer.params['ones']], axis=0)
                 layer.params['freqs'] = tf.concat([layer.params['freqs'], layer.params['freqs']], axis=0)
                 layer.initconds = tf.concat([tf.math.real(layer.initconds), tf.math.imag(layer.initconds)], axis=0)
+                layer.currstate = layer.initconds
                 layer.nosc = layer.nosc*2
                 for conn in layer.connections:
                     conn.matrix = tf.concat([tf.math.real(conn.matrix), tf.math.imag(conn.matrix)], axis=0)
             for stim in self.stimuli:
                 stim.values = tf.concat([tf.math.real(stim.values), tf.math.imag(stim.values)], axis=0)
                 stim.initconds = tf.concat([tf.math.real(stim.initconds), tf.math.imag(stim.initconds)], axis=0)
-        self.all_layers_init_conds = [layer.initconds for layer in self.layers]
-        self.all_conns_init_conds = [[[conn.source.initconds, conn.matrix] for conn in layer.connections] for layer in self.layers]
+                stim.currstate = stim.initconds
 
-        all_layers_steps, all_conns_steps = self.odeRK4()
+        self.odeRK4()
 
-        del self.all_layers_init_conds
-        del self.all_conns_init_conds
         if self.zfun == xdot_ydot:
             for stim in self.stimuli:
                 stim_values_real, stim_values_imag = tf.split(stim.values, 2, axis=0)
                 stim.values = tf.complex(stim_values_real, stim_values_imag)
                 stim_initconds_real, stim_initconds_imag = tf.split(stim.initconds, 2, axis=0)
                 stim.initconds = tf.complex(stim_initconds_real, stim_initconds_imag)
-            for ilayer, layer in enumerate(self.layers):
-                layer.params['ones'], _ = tf.split(layer.params['ones'], 2, axis=0)
+            for layer in self.layers:
                 layer.params['freqs'], _ = tf.split(layer.params['freqs'], 2, axis=0)
                 initconds_real, initconds_imag = tf.split(layer.initconds, 2, axis=0)
                 layer.initconds = tf.complex(initconds_real, initconds_imag)
                 layer.nosc = layer.nosc/2
-                layer_steps_real, layer_steps_imag = tf.split(tf.transpose(all_layers_steps[ilayer]), 2, axis=0)
+                layer_steps_real, layer_steps_imag = tf.split(tf.transpose(layers.allsteps), 2, axis=0)
                 layer.allsteps = tf.complex(layer_steps_real, layer_steps_imag)
                 for conn in layer.connections:
                     conn_matrix_real, conn_matrix_imag = tf.split(conn.matrix, 2, axis=0)
