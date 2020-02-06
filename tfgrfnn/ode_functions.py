@@ -15,27 +15,26 @@ def xdot_ydot(t, tidx, xt_yt, connections, alpha=None, beta1=None, beta2=None, e
                                 x2tplusy2t], axis=0)
     x2tplusy2tsquared_x2tplusy2tsquared = tf.pow(x2tplusy2t_x2tplusy2t, 2)
 
-    xtnew_ytnew = tf.add_n([
-                            tf.scalar_mul(alpha, xt_yt),
+    xtnew_ytnew = tf.add_n([tf.scalar_mul(alpha, xt_yt),
                             tf.scalar_mul(omega, minusyt_plusxt),
                             tf.scalar_mul(beta1, tf.multiply(xt_yt, x2tplusy2t_x2tplusy2t)),
                             tf.divide(
                                 tf.scalar_mul(tf.multiply(epsilon, beta2), 
                                     tf.multiply(xt_yt, x2tplusy2tsquared_x2tplusy2tsquared)),
                                 tf.subtract(tf.constant(1.0, dtype=tf.float64), 
-                                    tf.scalar_mul(epsilon, x2tplusy2t_x2tplusy2t)))
-                            ])
+                                    tf.scalar_mul(epsilon, x2tplusy2t_x2tplusy2t)))])
 
-    csrt_csit = tf.add_n([compute_input(tidx, conn.source.currstate, 
-                                            conn.matrix,
-                                            conn.learnparams['learntype']) for conn in connections])
+    csrt_csit = tf.add_n([compute_input(tidx, conn) for conn in connections])
             
     dxdt_dydt = tf.multiply(freqs, tf.add(xtnew_ytnew, csrt_csit))
     
     return dxdt_dydt
 
 
-def compute_input(time_index, conn_source_state, conn_matrix, conn_learntype):
+def compute_input(time_index, conn):
+    conn_source_state = conn.source.currstate
+    conn_matrix = conn.matrix
+    learntype = conn.learnparams['learntypeint']
 
     def compute_input_1freq(srt_sit=conn_source_state, crt_cit=conn_matrix):
 
@@ -53,17 +52,19 @@ def compute_input(time_index, conn_source_state, conn_matrix, conn_learntype):
 
         return tf.constant(0, dtype=tf.float64, shape=(conn.target.nosc,))
 
-    csrt_csit = tf.case({tf.equal(conn_learntype, 'null'): compute_input_null,
-                        tf.equal(conn_learntype, '1freq'): compute_input_1freq})
+    csrt_csit = tf.switch_case(learntype,
+                                branch_fns={0: compute_input_null,
+                                            1: compute_input_1freq})
 
     return csrt_csit
 
 def crdot_cidot(t, t_idx, xst_yst, crt_cit, xtt_ytt, learnparams):
 
-    learntype = learnparams['learntype']
+    learntype = learnparams['learntypeint']
 
-    dcrt_dcit = tf.case({tf.equal(learntype, 'null'): learn_null,
-                        tf.equal(learntype, '1freq'): learn_1freq})
+    dcrt_dcit = tf.switch_case(learntype,
+                            brach_fns={0: learn_null,
+                                    1: learn_1freq})
 
     def learn_null(crt_cit):
         return crt_cit

@@ -76,17 +76,19 @@ class connection():
         if self.learnparams['learntype'] == 'null':
             self.typeint = tf.constant(0)
             self.matrix = tf.constant(0, dtype=tf.complex128, shape=(1, self.source.nosc))
-            self.learnparams = {}
+            self.learnparams['learntypeint'] = tf.constant(0)
         elif self.learnparams['learntype'] == '1freq' and isinstance(self.source, stimulus):
             self.matrix = tf.complex(tf.random.normal(shape=(self.target.nosc, self.source.nchannels), dtype=tf.float64),
                                     tf.random.normal(shape=(self.target.nosc, self.source.nchannels), dtype=tf.float64))
             self.learnparams['freqss'] = self.target.freqs
             self.learnparams['freqst'] = self.target.freqs
+            self.learnparams['learntypeint'] = tf.constant(1)
         elif self.learnparams['learntype'] == '1freq' and isinstance(self.source, oscillators):
             self.matrix = tf.complex(tf.random.normal(shape=(self.target.nosc, self.source.nosc), dtype=tf.float64),
                                     tf.random.normal(shape=(self.target.nosc, self.source.nosc), dtype=tf.float64))
             self.learnparams['freqss'] = self.source.freqs
             self.learnparams['freqst'] = self.target.freqs
+            self.learnparams['learntypeint'] = tf.constant(1)
 
 
 def connect(source=None, target=None, learnparams={'learntype':'null'}):
