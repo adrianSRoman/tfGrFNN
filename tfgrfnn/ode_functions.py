@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import tfgrfnn as tg
 
-def xdot_ydot(t, xt_yt, connmats_state, connsourcesintid, connections, sources_state, alpha=None, beta1=None, beta2=None, epsilon=None, freqs= None):
+def xdot_ydot(t, xt_yt, connmats_state, connections, sources_state, alpha=None, beta1=None, beta2=None, epsilon=None, freqs= None):
 
     omega = tf.constant(2*np.pi, dtype=tf.float64)
 
@@ -24,9 +24,10 @@ def xdot_ydot(t, xt_yt, connmats_state, connsourcesintid, connections, sources_s
                                 tf.subtract(tf.constant(1.0, dtype=tf.float64), 
                                     tf.scalar_mul(epsilon, x2tplusy2t_x2tplusy2t)))])
 
-    csrt_csit = tf.add_n([compute_input(connmat_state, sources_state[connsourcesintid[iconn], 
-                            connections[iconn].learnparams['learntypeint']]) 
-                        for iconn, connmat in enumerate(connmats_state) if connmats_state else [0]])
+    csrt_csit = tf.add_n([compute_input(connmat_state, 
+                            sources_state[connections[iconn].sourceintid], 
+                            connections[iconn].learnparams['learntypeint'])
+                        for iconn, connmat_state in enumerate(connmats_state)]) if connmats_state else 0
             
     dxdt_dydt = tf.multiply(freqs, tf.add(xtnew_ytnew, csrt_csit))
     
@@ -52,12 +53,9 @@ def compute_input(connmat_state, source_state, learntypeint):
 
     return csrt_csit
 
-def crdot_cidot(t xst_yst, crt_cit, xtt_ytt, learnparams):
+def crdot_cidot(t, xst_yst, crt_cit, xtt_ytt, learnparams):
 
-    def learn_null(crt_cit=crt_cit):
-        return crt_cit
-
-    def learn_1freq(t=t, t_idx=t_idx, xst_yst=xst_yst, crt_cit=crt_cit, xtt_ytt=xtt_ytt, learnparams=learnparams):
+    def learn_1freq(t=t, xst_yst=xst_yst, crt_cit=crt_cit, xtt_ytt=xtt_ytt, learnparams=learnparams):
         
         lambda_ = learnparams['lambda_']
         mu1 = learnparams['mu1']
@@ -106,7 +104,6 @@ def crdot_cidot(t xst_yst, crt_cit, xtt_ytt, learnparams):
     learntype = learnparams['learntypeint']
 
     dcrdt_dcidt = tf.switch_case(learntype,
-                            branch_fns={0: learn_null,
-                                    1: learn_1freq})
+                            branch_fns={0: learn_1freq})
 
     return dcrdt_dcidt
