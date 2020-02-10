@@ -11,7 +11,7 @@ time = tf.range(dur, delta=dt, dtype=tf.float64)
 nosc = 201
 
 l1 = tg.oscillators(name='l1', osctype=canonical_hopf(alpha=0.1, beta1=-1.0, beta2=-1000.0, epsilon=1.0), 
-                    freqspacing='log', freqlims=(0.5, 2.0), nosc=nosc, initconds=tf.constant(0.0+1j*0.3, dtype=tf.complex128, shape=(nosc,)))
+                    freqspacing='log', freqlims=(0.5, 1.0), nosc=nosc, initconds=tf.constant(0.0+1j*0.3, dtype=tf.complex128, shape=(nosc,)))
 
 s1 = tg.stimulus('s1', values=tf.constant(0, dtype=tf.complex128, shape=tf.shape(time)), fs=1/dt)
 

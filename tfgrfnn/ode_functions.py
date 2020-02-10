@@ -90,19 +90,14 @@ def crdot_cidot(t, xst_yst, crt_cit, xtt_ytt, learnparams):
                             tf.pow(cit, 2))
         cr2tplusci2t_cr2tplusci2t = tf.concat([cr2tplusci2t, 
                                     cr2tplusci2t], axis=0)
-        cr2tplusci2tsquared_cr2tplusci2tsquared = tf.concat([cr2tplusci2t_cr2tplusci2t], axis=0)
-        plusytt_minusxtt = tf.concat([ytt, tf.scalar_mul(-1, xtt)], axis=0) 
+        cr2tplusci2tsquared_cr2tplusci2tsquared = tf.pow(cr2tplusci2t_cr2tplusci2t, 2)
 
         dcrdt_dcidt = tf.add_n([tf.scalar_mul(lambda_, crt_cit),
-                            tf.scalar_mul(mu1, tf.multiply(crt_cit,
-                                                    cr2tplusci2t_cr2tplusci2t)),
-                            tf.divide(    
-                                tf.scalar_mul(tf.multiply(epsilon, mu2), 
-                                            tf.multiply(crt_cit,
-                                                    cr2tplusci2tsquared_cr2tplusci2tsquared)),
-                                tf.subtract(tf.constant(1.0, dtype=tf.float64), 
-                                    tf.scalar_mul(epsilon, tf.multiply(crt_cit,
-                                                    cr2tplusci2t_cr2tplusci2t)))),
+                            tf.scalar_mul(mu1, tf.multiply(crt_cit, cr2tplusci2t_cr2tplusci2t)),
+                            tf.divide(tf.scalar_mul(tf.multiply(epsilon, mu2), 
+                                        tf.multiply(crt_cit, cr2tplusci2tsquared_cr2tplusci2tsquared)),
+                                    tf.subtract(tf.constant(1.0, dtype=tf.float64), 
+                                        tf.scalar_mul(epsilon, cr2tplusci2t_cr2tplusci2t))),
                             tf.scalar_mul(kappa, tf.concat([tf.add(tf.matmul(tf.expand_dims(xtt,-1), 
                                                                             tf.expand_dims(xst,0)), 
                                                                 tf.matmul(tf.expand_dims(ytt,-1), 
