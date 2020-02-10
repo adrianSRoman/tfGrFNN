@@ -36,6 +36,18 @@ def xdot_ydot(t, xt_yt, connmats_state, connections, sources_state, alpha=None, 
 
 def compute_input(connmat_state, source_state, learntypeint):
 
+    def compute_input_nolearning(srt_sit=source_state, crt_cit=connmat_state):
+
+        srt_sit = tf.expand_dims(srt_sit, -1)
+        srt, sit = tf.split(srt_sit, 2, axis=0)
+        crt, cit = tf.split(crt_cit, 2, axis=0)
+        csrt = tf.matmul(crt, srt)
+        csit = tf.matmul(cit, sit)
+
+        csrt_csit = tf.squeeze(tf.concat([csrt, csit], axis=0))
+
+        return csrt_csit 
+
     def compute_input_1freq(srt_sit=source_state, crt_cit=connmat_state):
 
         srt_sit = tf.expand_dims(srt_sit, -1)
@@ -49,11 +61,16 @@ def compute_input(connmat_state, source_state, learntypeint):
         return csrt_csit 
 
     csrt_csit = tf.switch_case(learntypeint,
-                                branch_fns={0: compute_input_1freq})
+                                branch_fns={0: compute_input_nolearning,
+                                            1: compute_input_1freq})
 
     return csrt_csit
 
 def crdot_cidot(t, xst_yst, crt_cit, xtt_ytt, learnparams):
+
+    def nolearning(t=t, xst_yst=xst_yst, crt_cit=crt_cit, xtt_ytt=xtt_ytt, learnparams=learnparams):
+        
+        return tf.constant(0, dtype=tf.float64, shape=crt_cit.shape)
 
     def learn_1freq(t=t, xst_yst=xst_yst, crt_cit=crt_cit, xtt_ytt=xtt_ytt, learnparams=learnparams):
         
@@ -104,6 +121,7 @@ def crdot_cidot(t, xst_yst, crt_cit, xtt_ytt, learnparams):
     learntype = learnparams['learntypeint']
 
     dcrdt_dcidt = tf.switch_case(learntype,
-                            branch_fns={0: learn_1freq})
+                                    branch_fns={0: nolearning,
+                                                1: learn_1freq})
 
     return dcrdt_dcidt
