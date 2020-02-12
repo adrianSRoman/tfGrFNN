@@ -24,7 +24,7 @@ def xdot_ydot(t, xt_yt, connmats_state, connections, sources_state, alpha=None, 
                                 tf.subtract(tf.constant(1.0, dtype=tf.float64), 
                                     tf.scalar_mul(epsilon, x2tplusy2t_x2tplusy2t)))])
 
-    csrt_csit = tf.add_n([compute_input(connmat_state, 
+    csrt_csit = 0.05*tf.add_n([compute_input(connmat_state, 
                             sources_state[connections[iconn].sourceintid], 
                             connections[iconn].learnparams['learntypeint'])
                         for iconn, connmat_state in enumerate(connmats_state)]) if connmats_state else 0

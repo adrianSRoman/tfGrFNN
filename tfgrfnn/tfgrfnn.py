@@ -40,7 +40,7 @@ class oscillators():
 class stimulus():
 
     def __init__(self, name='', 
-                    values = tf.constant(0, dtype=tf.complex128, shape=(1,1)),
+                    values = tf.constant(0, dtype=tf.complex128),
                     fs = tf.constant(1.0)):
 
         self.values = values
@@ -118,11 +118,11 @@ class Model():
 
         self.layers = layers
         self.time = time
-        self.stim = stim if stim else stimulus(values=tf.constant(0, shape=(1,tf.shape(self.time))))
-        self.zfun = zfun
-        self.cfun = cfun
         self.dt = dt
         self.half_dt = dt/2
+        self.stim = stim if stim else stimulus(values=tf.constant(0, dtype=tf.float64, shape=(tf.shape(self.time))), fs=1/self.dt)
+        self.zfun = zfun
+        self.cfun = cfun
 
     @tf.function
     def odeRK4(self, layers_state, layers_connmats_state):
