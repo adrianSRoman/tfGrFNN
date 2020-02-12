@@ -5,7 +5,7 @@ from oscillator_types import canonical_hopf
 import time as t
 import matplotlib.pyplot as plt
 
-dur = 50
+dur = 100
 dt = 0.025
 time = tf.range(dur, delta=dt, dtype=tf.float64)
 nosc = 201
@@ -25,8 +25,8 @@ toc = t.time() - tic
 print(toc)
 
 plt.semilogx(GrFNN.layers[0].freqs,np.abs(GrFNN.layers[0].allsteps[-1]))
-plt.ylim([0 1.3*np.max(np.abs(GrFNN.layers[0].allsteps[-1]))])
+plt.ylim([0, 1.3*np.max(np.abs(GrFNN.layers[0].allsteps[-1]))])
 plt.grid()
 plt.xlabel('Oscillator natural frequency (Hz)')
 plt.ylabel('Manitude')
-plt.savefig('test.png')
+plt.savefig('ex1.png')
