@@ -10,14 +10,15 @@ dt = 0.025
 time = tf.range(dur, delta=dt, dtype=tf.float64)
 nosc = 201
 
-l1 = tg.oscillators(name='l1', osctype=canonical_hopf(alpha=0.0, beta1=-1.0, beta2=-1.0, epsilon=1.0), 
-                    freqspacing='log', freqlims=(0.5, 2.0), nosc=nosc, initconds=tf.constant(0.0+1j*0.3, dtype=tf.complex128, shape=(nosc,)))
+l1 = tg.oscillators(name='l1', osctype=canonical_hopf(alpha=0.01, beta1=-1.0, beta2=0.0, epsilon=0.0), 
+                    freqspacing='log', freqlims=(0.5, 2.0), nosc=nosc, 
+                    initconds=tf.constant(0.0+1j*0.1, dtype=tf.complex128, shape=(nosc,)))
 
 s1 = tg.stimulus(name='s1', values=0.25*tf.complex(tf.math.cos(2*np.pi*time), tf.math.sin(2*np.pi*time)), fs=1/dt)
 
-l1 = tg.connect(source=s1, target=l1)
+l1 = tg.connect(source=s1, target=l1, matrixinit=1)
 
-GrFNN = tg.Model(name='GrFNN', layers=[l1], stim=s1, time=tf.squeeze(time))
+GrFNN = tg.Model(name='GrFNN', layers=[l1], stim=s1, time=time)
 
 tic = t.time()
 GrFNN = GrFNN.integrate()
