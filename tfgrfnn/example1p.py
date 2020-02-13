@@ -11,9 +11,9 @@ time = tf.range(dur, delta=dt, dtype=tf.float64)
 nosc = 201
 
 l1 = tg.oscillators(name='l1', osctype=canonical_hopf(alpha=1.0, beta1=-1.0, beta2=-1000.0, epsilon=1.0), 
-                    freqspacing='log', freqlims=(0.5, 2.0), nosc=nosc, initconds=tf.constant(0.01+1j*0.01, dtype=tf.complex128, shape=(nosc,)))
+                    freqspacing='log', freqlims=(0.5, 2.0), nosc=nosc, initconds=tf.constant(0.018+1j*0.0, dtype=tf.complex128, shape=(nosc,)))
 
-l1 = tg.connect(source=l1, target=l1, matrixinit=1, learnparams={'learntype':'1freq',
+l1 = tg.connect(source=l1, target=l1, matrixinit=1.0+1j*1.0, learnparams={'learntype':'1freq',
                                                                 'lambda_':tf.constant(0.001, dtype=tf.float64),
                                                                 'mu1':tf.constant(-1.0, dtype=tf.float64),
                                                                 'mu2':tf.constant(-50.0, dtype=tf.float64),

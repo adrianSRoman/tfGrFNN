@@ -16,7 +16,7 @@ l1 = tg.oscillators(name='l1', osctype=canonical_hopf(alpha=0.01, beta1=-1.0, be
 
 s1 = tg.stimulus(name='s1', values=0.25*tf.complex(tf.math.cos(2*np.pi*time), tf.math.sin(2*np.pi*time)), fs=1/dt)
 
-l1 = tg.connect(source=s1, target=l1, matrixinit=1)
+l1 = tg.connect(source=s1, target=l1, matrixinit=1.0+1j*1.0)
 
 GrFNN = tg.Model(name='GrFNN', layers=[l1], stim=s1, time=time)
 

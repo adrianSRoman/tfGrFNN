@@ -43,6 +43,7 @@ class stimulus():
                     values = tf.constant(0, dtype=tf.complex128),
                     fs = tf.constant(1.0)):
 
+        self.name = name
         self.values = values
         self.shape = tf.shape(self.values)
         self.ntime = self.shape[0]
@@ -56,19 +57,19 @@ class connection():
     def __init__(self, name = '', 
                     source = None,
                     target = None,
-                    matrixinit = 1,
-                    learnparams = {'learntype':'nolearning',
+                    matrixinit = 1.0+1j*1.0,
+                    learnparams = None):
+
+        self.name = name
+        self.source = source
+        self.target = target
+        self.learnparams = learnparams if learnparams else {'learntype':'nolearning',
                                     'lambda_':tf.constant(0.0, dtype=tf.float64), 
                                     'mu1':tf.constant(0.0, dtype=tf.float64), 
                                     'mu2':tf.constant(0.0, dtype=tf.float64), 
                                     'epsilon':tf.constant(0.0, dtype=tf.float64), 
                                     'kappa':tf.constant(0.0, dtype=tf.float64),
-                                    'weight':tf.constant(1.0, dtype=tf.float64)}):
-
-        self.name = name
-        self.source = source
-        self.target = target
-        self.learnparams = learnparams
+                                    'weight':tf.constant(1.0, dtype=tf.float64)}
         self.matrixinit = matrixinit
         if self.learnparams['learntype'] == 'nolearning' and isinstance(self.source, stimulus):
             self.matrixinit = tf.constant(self.matrixinit, dtype=tf.complex128, shape=(self.target.nosc, self.source.nchannels))
@@ -94,16 +95,15 @@ class connection():
             self.learnparams['learntypeint'] = tf.constant(1)
 
 
-def connect(source=None, target=None, matrixinit=1,  learnparams={'learntype':'nolearning',
-                                                                    'lambda_':tf.constant(0.0, dtype=tf.float64), 
-                                                                    'mu1':tf.constant(0.0, dtype=tf.float64), 
-                                                                    'mu2':tf.constant(0.0, dtype=tf.float64), 
-                                                                    'epsilon':tf.constant(0.0, dtype=tf.float64), 
-                                                                    'kappa':tf.constant(0.0, dtype=tf.float64),
-                                                                    'weight':tf.constant(1.0, dtype=tf.float64)}):
+def connect(source=None, target=None, matrixinit=1.0+1j*1.0,  learnparams=None):
 
-    conn = connection(source=source, target=target, matrixinit=matrixinit, learnparams=learnparams)
-    target.connections.append(conn) 
+    target.connections = target.connections + [connection(source=source, target=target, matrixinit=matrixinit, learnparams=learnparams if learnparams else {'learntype':'nolearning',
+                                        'lambda_':tf.constant(0.0, dtype=tf.float64), 
+                                        'mu1':tf.constant(0.0, dtype=tf.float64), 
+                                        'mu2':tf.constant(0.0, dtype=tf.float64), 
+                                        'epsilon':tf.constant(0.0, dtype=tf.float64), 
+                                        'kappa':tf.constant(0.0, dtype=tf.float64),
+                                        'weight':tf.constant(1.0, dtype=tf.float64)})]
 
     return target
        
@@ -131,7 +131,7 @@ class Model():
 
         def scan_fn(layers_and_layers_connmats_state, time_dts_stim):
 
-            def get_next_k(time_val, layers_state, layes_connmats_state):
+            def get_next_k(time_val, layers_state, layers_connmats_state):
 
                 layers_k = [self.zfun(time_val, layer_state, layer_connmats_state, 
                                 self.layers[ilayer].connections, layers_state, **self.layers[ilayer].params)
@@ -218,10 +218,7 @@ class Model():
                 layer.nosc = layer.nosc*2
                 for conn in layer.connections:
                     conn.sourceintid = conn.source.intid
-                    if conn.sourceintid == 0 and conn.learnparams['learntypeint'] == 0:
-                        conn.matrixinit = tf.concat([tf.math.real(conn.matrixinit), tf.math.real(conn.matrixinit)], axis=0)
-                    else:
-                        conn.matrixinit = tf.concat([tf.math.real(conn.matrixinit), tf.math.imag(conn.matrixinit)], axis=0)
+                    conn.matrixinit = tf.concat([tf.math.real(conn.matrixinit), tf.math.imag(conn.matrixinit)], axis=0)
 
         layers_state = [layer.initconds for layer in self.layers]
         layers_connmats_state = [[conn.matrixinit 
