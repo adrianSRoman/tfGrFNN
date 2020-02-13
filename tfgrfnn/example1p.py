@@ -18,7 +18,8 @@ l1 = tg.connect(source=l1, target=l1, matrixinit=1, learnparams={'learntype':'1f
                                                                 'mu1':tf.constant(-1.0, dtype=tf.float64),
                                                                 'mu2':tf.constant(-50.0, dtype=tf.float64),
                                                                 'epsilon':tf.constant(16.0, dtype=tf.float64),
-                                                                'kappa':tf.constant(1.0, dtype=tf.float64)})
+                                                                'kappa':tf.constant(1.0, dtype=tf.float64),
+                                                                'weight':tf.constant(0.05, dtype=tf.float64)})
 
 GrFNN = tg.Model(name='GrFNN', layers=[l1], time=tf.squeeze(time))
 

@@ -62,7 +62,8 @@ class connection():
                                     'mu1':tf.constant(0.0, dtype=tf.float64), 
                                     'mu2':tf.constant(0.0, dtype=tf.float64), 
                                     'epsilon':tf.constant(0.0, dtype=tf.float64), 
-                                    'kappa':tf.constant(0.0, dtype=tf.float64)}):
+                                    'kappa':tf.constant(0.0, dtype=tf.float64),
+                                    'weight':tf.constant(1.0, dtype=tf.float64)}):
 
         self.name = name
         self.source = source
@@ -98,7 +99,8 @@ def connect(source=None, target=None, matrixinit=1,  learnparams={'learntype':'n
                                                                     'mu1':tf.constant(0.0, dtype=tf.float64), 
                                                                     'mu2':tf.constant(0.0, dtype=tf.float64), 
                                                                     'epsilon':tf.constant(0.0, dtype=tf.float64), 
-                                                                    'kappa':tf.constant(0.0, dtype=tf.float64)}):
+                                                                    'kappa':tf.constant(0.0, dtype=tf.float64),
+                                                                    'weight':tf.constant(1.0, dtype=tf.float64)}):
 
     conn = connection(source=source, target=target, matrixinit=matrixinit, learnparams=learnparams)
     target.connections.append(conn) 
