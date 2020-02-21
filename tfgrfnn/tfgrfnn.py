@@ -9,7 +9,7 @@ from ode_functions import xdot_ydot, crdot_cidot
 class oscillators():
 
     def __init__(self, name = '', 
-                    osctype = canonical_hopf(),
+                    osctype = canonical_hopf().params(),
                     nosc = 256,
                     freqlims = (0.12, 8.0),
                     freqspacing = 'log',
@@ -28,7 +28,7 @@ class oscillators():
             self.freqs = np.linpace(self.freqlims[0],
                             self.freqlims[1],
                             self.nosc)
-        self.params = self.osctype.params()
+        self.params = self.osctype
         self.params['freqs'] = tf.constant(self.freqs, dtype=tf.float64)
         self.initconds = tf.constant(initconds)
         self.connections = []
@@ -240,16 +240,11 @@ class Model():
                 layer.nosc = layer.nosc/2
                 del layer.intid
                 for iconn, conn in enumerate(layer.connections):
-                    if conn.sourceintid == 0 and conn.learnparams['learntypeint'] == 0:
-                        conn.matrixinit, _ = tf.split(conn.matrixinit, 2, axis=0)
-                        conn.allmatrixsteps = []
-                    elif conn.learnparams['learntypeint'] == 0:
-                        conn_matrixinit_real, conn_matrixinit_imag = tf.split(conn.matrixinit, 2, axis=0)
-                        conn.matrixinit = tf.complex(conn_matrixinit_real, conn_matrixinit_imag)
+                    conn_matrixinit_real, conn_matrixinit_imag = tf.split(conn.matrixinit, 2, axis=0)
+                    conn.matrixinit = tf.complex(conn_matrixinit_real, conn_matrixinit_imag)
+                    if conn.learnparams['learntypeint'] == 0:
                         conn.allmatrixsteps = []
                     else:
-                        conn_matrixinit_real, conn_matrixinit_imag = tf.split(conn.matrixinit, 2, axis=0)
-                        conn.matrixinit = tf.complex(conn_matrixinit_real, conn_matrixinit_imag)
                         connmat_states_real, connmat_states_imag = tf.split(layers_connmats_state[ilayer][iconn], 2, axis=1)
                         conn.allmatrixsteps = tf.complex(connmat_states_real, connmat_states_imag)
                     del conn.sourceintid
