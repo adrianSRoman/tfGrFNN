@@ -2,46 +2,43 @@ import numpy as np
 import tensorflow as tf
 import copy
 
-from oscillator_types import canonical_hopf
 from ode_functions import xdot_ydot, crdot_cidot
 
 
-class oscillators():
+class neurons():
 
     def __init__(self, name = '', 
-                    osctype = canonical_hopf().params(),
-                    nosc = 256,
-                    freqlims = (0.12, 8.0),
-                    freqspacing = 'log',
-                    initconds = tf.constant(0, dtype=tf.complex128, shape=(256,))):
+                    osctype = 'grfnn',
+                    params = None,
+                    freqs = None, 
+                    initconds = None):
+        
+        freqs = freqs if freqs else tf.constant(np.logspace(np.log10(self.freqlims[0]),
+                                                np.log10(self.freqlims[1]), 
+                                                256), dtype=tf.float64)
+        params = params if params else {'alpha':tf.constant(0.0, dtype=tf.float64),
+                                        'beta1':tf.constant(0.0, dtype=tf.float64),
+                                        'beta2':tf.constant(0.0, dtype=tf.float64),
+                                        'epsilon':tf.constant(0.0, dtype=tf.float64)}
+        initconds = initconds if initconds else tf.constant(0, dtype=tf.complex128, shape=(nosc,))
 
         self.name = name
         self.osctype = osctype
-        self.freqspacing = freqspacing
-        self.freqlims = freqlims
-        self.nosc = nosc
-        if self.freqspacing == 'log':
-            self.freqs = np.logspace(np.log10(self.freqlims[0]),
-                            np.log10(self.freqlims[1]), 
-                            self.nosc)
-        elif self.freqspacing == 'lin':
-            self.freqs = np.linpace(self.freqlims[0],
-                            self.freqlims[1],
-                            self.nosc)
-        self.params = self.osctype
-        self.params['freqs'] = tf.constant(self.freqs, dtype=tf.float64)
-        self.initconds = tf.constant(initconds)
+        self.params = params
+        self.initconds = initconds
+        self.nosc = len(freqs)
+        self.params['freqs'] = freqs
         self.connections = []
 
     def __repr__(self):
-        return "<Layer with %s %s oscillators and %s connections>" % (self.nosc, self.osctype, len(self.connections))
+        return "<Layer with %s %s neurons and %s connections>" % (self.nosc, self.osctype, len(self.connections))
 
 
 class stimulus():
 
     def __init__(self, name='', 
                     values = tf.constant(0, dtype=tf.complex128),
-                    fs = tf.constant(1.0)):
+                    fs = tf.constant(0.0)):
 
         self.name = name
         self.values = values
@@ -57,53 +54,57 @@ class connection():
     def __init__(self, name = '', 
                     source = None,
                     target = None,
-                    matrixinit = 1.0+1j*1.0,
+                    matrixinit = None,
                     learnparams = None):
+
+        learnparams = learnparams if learnparams else {'learntype':'nolearning',
+                                                        'lambda_':tf.constant(0.0, dtype=tf.float64), 
+                                                        'mu1':tf.constant(0.0, dtype=tf.float64), 
+                                                        'mu2':tf.constant(0.0, dtype=tf.float64), 
+                                                        'epsilon':tf.constant(0.0, dtype=tf.float64), 
+                                                        'kappa':tf.constant(0.0, dtype=tf.float64),
+                                                        'weight':tf.constant(1.0, dtype=tf.float64)}
 
         self.name = name
         self.source = source
         self.target = target
-        self.learnparams = learnparams if learnparams else {'learntype':'nolearning',
-                                    'lambda_':tf.constant(0.0, dtype=tf.float64), 
-                                    'mu1':tf.constant(0.0, dtype=tf.float64), 
-                                    'mu2':tf.constant(0.0, dtype=tf.float64), 
-                                    'epsilon':tf.constant(0.0, dtype=tf.float64), 
-                                    'kappa':tf.constant(0.0, dtype=tf.float64),
-                                    'weight':tf.constant(1.0, dtype=tf.float64)}
+        self.learnparams = learnparams
         self.matrixinit = matrixinit
         if self.learnparams['learntype'] == 'nolearning' and isinstance(self.source, stimulus):
-            self.matrixinit = tf.constant(self.matrixinit, dtype=tf.complex128, shape=(self.target.nosc, self.source.nchannels))
             self.learnparams['freqss'] = tf.constant(0, dtype=tf.float64, shape=(self.source.nchannels,))
             self.learnparams['freqst'] = tf.constant(0, dtype=tf.float64, shape=(self.target.nosc,))
             self.learnparams['learntypeint'] = tf.constant(0)
-        elif self.learnparams['learntype'] == 'nolearning' and isinstance(self.source, oscillators):
-            self.matrixinit = tf.constant(self.matrixinit, dtype=tf.complex128, shape=(self.target.nosc, self.source.nosc))
+        elif self.learnparams['learntype'] == 'nolearning' and isinstance(self.source, neurons):
             self.learnparams['freqss'] = tf.constant(0, dtype=tf.float64, shape=(self.source.nosc,))
             self.learnparams['freqst'] = tf.constant(0, dtype=tf.float64, shape=(self.target.nosc,))
             self.learnparams['learntypeint'] = tf.constant(0)
-        elif self.learnparams['learntype'] == '1freq' and isinstance(self.source, stimulus):
-            self.matrixinit = tf.complex(tf.random.normal(shape=(self.target.nosc, self.source.nchannels), dtype=tf.float64),
-                                    tf.random.normal(shape=(self.target.nosc, self.source.nchannels), dtype=tf.float64))
+        elif isinstance(self.source, stimulus):
             self.learnparams['freqss'] = tf.constant(0, dtype=tf.float64, shape=(self.source.nchannels,))
             self.learnparams['freqst'] = self.target.freqs
             self.learnparams['learntypeint'] = tf.constant(1)
-        elif self.learnparams['learntype'] == '1freq' and isinstance(self.source, oscillators):
-            self.matrixinit = tf.complex(tf.random.normal(shape=(self.target.nosc, self.source.nosc), dtype=tf.float64, stddev=0.01),
-                                    tf.random.normal(shape=(self.target.nosc, self.source.nosc), dtype=tf.float64, stddev=0.01))
+        elif isinstance(self.source, neurons):
             self.learnparams['freqss'] = self.source.freqs
             self.learnparams['freqst'] = self.target.freqs
             self.learnparams['learntypeint'] = tf.constant(1)
 
+    def __repr__(self):
+        return "<Connection from %s to %s with matrix of size %s>" % (self.source.name, 
+                                                                        self.target.name, 
+                                                                        tf.shape(self.matrixinit).numpy())
 
-def connect(source=None, target=None, matrixinit=1.0+1j*1.0,  learnparams=None):
 
-    target.connections = target.connections + [connection(source=source, target=target, matrixinit=matrixinit, learnparams=learnparams if learnparams else {'learntype':'nolearning',
-                                        'lambda_':tf.constant(0.0, dtype=tf.float64), 
-                                        'mu1':tf.constant(0.0, dtype=tf.float64), 
-                                        'mu2':tf.constant(0.0, dtype=tf.float64), 
-                                        'epsilon':tf.constant(0.0, dtype=tf.float64), 
-                                        'kappa':tf.constant(0.0, dtype=tf.float64),
-                                        'weight':tf.constant(1.0, dtype=tf.float64)})]
+def connect(source=None, target=None, matrixinit=None, learnparams=None):
+
+    target.connections = target.connections + [connection(source=source,
+                                                            target=target, 
+                                                            matrixinit=matrixinit, 
+                                                            learnparams={'learntype':'nolearning',
+                                                                        'lambda_':tf.constant(0.0, dtype=tf.float64), 
+                                                                        'mu1':tf.constant(0.0, dtype=tf.float64), 
+                                                                        'mu2':tf.constant(0.0, dtype=tf.float64), 
+                                                                        'epsilon':tf.constant(0.0, dtype=tf.float64), 
+                                                                        'kappa':tf.constant(0.0, dtype=tf.float64),
+                                                                        'weight':tf.constant(1.0, dtype=tf.float64)})]
 
     return target
        
