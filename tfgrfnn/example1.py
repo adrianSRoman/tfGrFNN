@@ -1,24 +1,28 @@
 import numpy as np
 import tensorflow as tf
 import tfgrfnn as tg
-from oscillator_types import canonical_hopf
 import time as t
 import matplotlib.pyplot as plt
 
 dur = 100
 dt = 0.025
-time = tf.range(dur, delta=dt, dtype=tf.float64)
+time = tf.range(dur, delta=dt, dtype=tf.float32)
 nosc = 201
 
-l1 = tg.oscillators(name='l1', osctype=canonical_hopf(alpha=0.01, beta1=-1.0, beta2=0.0, epsilon=0.0), 
-                    freqspacing='log', freqlims=(0.5, 2.0), nosc=nosc, 
-                    initconds=tf.constant(0.0+1j*0.1, dtype=tf.complex128, shape=(nosc,)))
+l1 = tg.neurons(name='l1', 
+                osctype='grfnn', 
+                params={'alpha':tf.constant(0.01, dtype=tf.float32), 
+                        'beta1':tf.constant(-1.0, dtype=tf.float32),
+                        'beta2':tf.constant(0.0, dtype=tf.float32),
+                        'epsilon':tf.constant(0.0, dtype=tf.float32)}, 
+                freqs=tf.constant(np.logspace(np.log10(0.5),np.log(2.0),nosc),dtype=tf.float32), 
+                initconds=tf.constant(0.0+1j*0.1, dtype=tf.complex64, shape=(nosc,)))
 
-s1 = tg.stimulus(name='s1', values=0.25*tf.complex(tf.math.cos(2*np.pi*time), tf.math.sin(2*np.pi*time)), fs=1/dt)
+s1 = tg.stimulus(name='s1', values=tf.expand_dims(tf.expand_dims(0.25*tf.complex(tf.math.cos(2*np.pi*time), tf.math.sin(2*np.pi*time)),0),2), fs=int(1/dt))
 
-l1 = tg.connect(source=s1, target=l1, matrixinit=1.0+1j*1.0)
+l1 = tg.connect(source=s1, target=l1, matrixinit=tf.constant(1.0+1j*1.0, dtype=tf.complex64, shape=(1,1)))
 
-GrFNN = tg.Model(name='GrFNN', layers=[l1], stim=s1, time=time)
+GrFNN = tg.Model(name='GrFNN', layers=[l1], stim=s1)
 
 tic = t.time()
 GrFNN = GrFNN.integrate()

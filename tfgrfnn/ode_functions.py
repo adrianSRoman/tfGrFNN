@@ -4,7 +4,7 @@ import tfgrfnn as tg
 
 def xdot_ydot(t, xt_yt, connmats_state, connections, sources_state, alpha=None, beta1=None, beta2=None, epsilon=None, freqs= None):
 
-    omega = tf.constant(2*np.pi, dtype=tf.float64)
+    omega = tf.constant(2*np.pi, dtype=tf.float32)
 
     xt, yt = tf.split(xt_yt, 2, axis=0)
     minusyt_plusxt = tf.concat([tf.scalar_mul(-1,yt), xt], axis=0)
@@ -21,7 +21,7 @@ def xdot_ydot(t, xt_yt, connmats_state, connections, sources_state, alpha=None, 
                             tf.divide(
                                 tf.scalar_mul(tf.multiply(epsilon, beta2), 
                                     tf.multiply(xt_yt, x2tplusy2tsquared_x2tplusy2tsquared)),
-                                tf.subtract(tf.constant(1.0, dtype=tf.float64), 
+                                tf.subtract(tf.constant(1.0, dtype=tf.float32), 
                                     tf.scalar_mul(epsilon, x2tplusy2t_x2tplusy2t)))])
 
     csrt_csit = tf.add_n([tf.scalar_mul(connections[iconn].learnparams['weight'], compute_input(connmat_state, 
@@ -38,7 +38,6 @@ def compute_input(connmat_state, source_state, learntypeint):
 
     def compute_input_nolearning(srt_sit=source_state, crt_cit=connmat_state):
 
-        srt_sit = tf.expand_dims(srt_sit, -1)
         srt, sit = tf.split(srt_sit, 2, axis=0)
         crt, cit = tf.split(crt_cit, 2, axis=0)
         csrt = tf.matmul(crt, srt)
@@ -50,7 +49,6 @@ def compute_input(connmat_state, source_state, learntypeint):
 
     def compute_input_1freq(srt_sit=source_state, crt_cit=connmat_state):
 
-        srt_sit = tf.expand_dims(srt_sit, -1)
         srt, sit = tf.split(srt_sit, 2, axis=0)
         crt, cit = tf.split(crt_cit, 2, axis=0)
         csrt = tf.matmul(crt, srt)
@@ -70,7 +68,7 @@ def crdot_cidot(t, xst_yst, crt_cit, xtt_ytt, learnparams):
 
     def nolearning(t=t, xst_yst=xst_yst, crt_cit=crt_cit, xtt_ytt=xtt_ytt, learnparams=learnparams):
         
-        return tf.constant(0, dtype=tf.float64, shape=crt_cit.shape)
+        return tf.constant(0, dtype=tf.float32, shape=crt_cit.shape)
 
     def learn_1freq(t=t, xst_yst=xst_yst, crt_cit=crt_cit, xtt_ytt=xtt_ytt, learnparams=learnparams):
         
@@ -96,7 +94,7 @@ def crdot_cidot(t, xst_yst, crt_cit, xtt_ytt, learnparams):
                             tf.scalar_mul(mu1, tf.multiply(crt_cit, cr2tplusci2t_cr2tplusci2t)),
                             tf.divide(tf.scalar_mul(tf.multiply(epsilon, mu2), 
                                         tf.multiply(crt_cit, cr2tplusci2tsquared_cr2tplusci2tsquared)),
-                                    tf.subtract(tf.constant(1.0, dtype=tf.float64), 
+                                    tf.subtract(tf.constant(1.0, dtype=tf.float32), 
                                         tf.scalar_mul(epsilon, cr2tplusci2t_cr2tplusci2t))),
                             tf.scalar_mul(kappa, tf.concat([tf.add(tf.matmul(tf.expand_dims(xtt,-1), 
                                                                             tf.expand_dims(xst,0)), 
