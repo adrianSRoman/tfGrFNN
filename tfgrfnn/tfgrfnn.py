@@ -5,32 +5,45 @@ import copy
 from ode_functions import xdot_ydot, crdot_cidot
 
 
+
+
+def default_neuron_params():
+
+    default_params = {'alpha':tf.constant(0.0, dtype=tf.float32),
+                    'beta1':tf.constant(0.0, dtype=tf.float32),
+                    'beta2':tf.constant(0.0, dtype=tf.float32),
+                    'epsilon':tf.constant(0.0, dtype=tf.float32)}
+
+    return default_params
+
+def default_freqs():
+
+    freqs = tf.constant(np.logspace(np.log10(0.5), np.log10(2.0), 256), 
+                        dtype=tf.float32)
+    return freqs
+
 class neurons():
 
     def __init__(self, name = '', 
                     osctype = 'grfnn',
-                    params = None,
-                    freqs = tf.constant(np.logspace(np.log10(0.25), np.log10(4.0), 256), 
-                                             dtype=tf.float32),
+                    params = default_neuron_params(),
+                    freqs = default_freqs(),
                     initconds = tf.constant(0, dtype=tf.complex64, shape=(256,))):
         
-        params = params if params else {'alpha':tf.constant(0.0, dtype=tf.float32),
-                                        'beta1':tf.constant(0.0, dtype=tf.float32),
-                                        'beta2':tf.constant(0.0, dtype=tf.float32),
-                                        'epsilon':tf.constant(0.0, dtype=tf.float32)}
-
         self.name = name
         self.osctype = osctype
         self.params = params
         self.initconds = initconds
         self.params['freqs'] = freqs
-        self.nosc = len(freqs)
+        self.N = len(freqs)
         self.connections = []
 
     def __repr__(self):
-        return "<Layer with %s %s neurons and %s connections>" % (self.nosc, 
+        return "<Layer with %s %s neurons and %s connections>" % (self.N, 
                                                                     self.osctype, 
                                                                     len(self.connections))
+
+
 
 
 class stimulus():
@@ -55,6 +68,8 @@ class stimulus():
                                                                                     self.nchannels)
 
 
+
+
 class connection():
 
     def __init__(self, name = '', 
@@ -63,13 +78,7 @@ class connection():
                     matrixinit = None,
                     learnparams = None):
 
-        learnparams = learnparams if learnparams else {'learntype':'nolearning',
-                                                        'lambda_':tf.constant(0.0, dtype=tf.float32), 
-                                                        'mu1':tf.constant(0.0, dtype=tf.float32), 
-                                                        'mu2':tf.constant(0.0, dtype=tf.float32), 
-                                                        'epsilon':tf.constant(0.0, dtype=tf.float32), 
-                                                        'kappa':tf.constant(0.0, dtype=tf.float32),
-                                                        'weight':tf.constant(1.0, dtype=tf.float32)}
+        learnparams = learnparams if learnparams else default_connections_params
 
         self.name = name
         self.source = source
@@ -78,11 +87,11 @@ class connection():
         self.matrixinit = matrixinit
         if self.learnparams['learntype'] == 'nolearning' and isinstance(self.source, stimulus):
             self.learnparams['freqss'] = tf.constant(0, dtype=tf.float32, shape=(self.source.nchannels,))
-            self.learnparams['freqst'] = tf.constant(0, dtype=tf.float32, shape=(self.target.nosc,))
+            self.learnparams['freqst'] = tf.constant(0, dtype=tf.float32, shape=(self.target.N,))
             self.learnparams['learntypeint'] = tf.constant(0)
         elif self.learnparams['learntype'] == 'nolearning' and isinstance(self.source, neurons):
-            self.learnparams['freqss'] = tf.constant(0, dtype=tf.float32, shape=(self.source.nosc,))
-            self.learnparams['freqst'] = tf.constant(0, dtype=tf.float32, shape=(self.target.nosc,))
+            self.learnparams['freqss'] = tf.constant(0, dtype=tf.float32, shape=(self.source.N,))
+            self.learnparams['freqst'] = tf.constant(0, dtype=tf.float32, shape=(self.target.N,))
             self.learnparams['learntypeint'] = tf.constant(0)
         elif isinstance(self.source, stimulus):
             self.learnparams['freqss'] = tf.constant(0, dtype=tf.float32, shape=(self.source.nchannels,))
@@ -98,22 +107,31 @@ class connection():
                                                                         self.target.name, 
                                                                         tf.shape(self.matrixinit).numpy())
 
+def default_connection_params():
 
-def connect(source = None, target = None, matrixinit = None, learnparams = None):
+    default_params = {'learntype':'nolearning',
+                       'lambda_':tf.constant(0.0, dtype=tf.float32),
+                       'mu1':tf.constant(0.0, dtype=tf.float32), 
+                       'mu2':tf.constant(0.0, dtype=tf.float32), 
+                       'epsilon':tf.constant(0.0, dtype=tf.float32),
+                       'kappa':tf.constant(0.0, dtype=tf.float32),
+                       'weight':tf.constant(1.0, dtype=tf.float32)}
 
-    target.connections = target.connections + [connection(source=source,
-                                                            target=target, 
-                                                            matrixinit=matrixinit, 
-                                                            learnparams={'learntype':'nolearning',
-                                                                        'lambda_':tf.constant(0.0, dtype=tf.float32), 
-                                                                        'mu1':tf.constant(0.0, dtype=tf.float32), 
-                                                                        'mu2':tf.constant(0.0, dtype=tf.float32), 
-                                                                        'epsilon':tf.constant(0.0, dtype=tf.float32), 
-                                                                        'kappa':tf.constant(0.0, dtype=tf.float32),
-                                                                        'weight':tf.constant(1.0, dtype=tf.float32)})]
+    return default_params
+
+def connect(connname = '', source = None, target = None, matrixinit = None, learnparams = None):
+
+    target.connections = target.connections + \
+                            [connection(name = connname,
+                                        source=source,
+                                        target=target, 
+                                        matrixinit=matrixinit, 
+                                        learnparams=default_connection_params())]
 
     return target
        
+
+
 
 class Model():
 
@@ -141,12 +159,17 @@ class Model():
             def get_next_k(time_val, layers_state, layers_connmats_state):
 
                 layers_k = [self.zfun(time_val, layer_state, layer_connmats_state, 
-                                self.layers[ilayer].connections, layers_state, **self.layers[ilayer].params)
-                                for ilayer, (layer_state, layer_connmats_state) in enumerate(zip(layers_state[1:], layers_connmats_state))]
-                layers_connmats_k = [[self.cfun(time_val, layers_state[self.layers[ilayer].connections[iconn].sourceintid], 
-                                    connmat_state, layer_state, self.layers[ilayer].connections[iconn].learnparams)
+                                    self.layers[ilayer].connections, layers_state, 
+                                    **self.layers[ilayer].params)
+                                for ilayer, (layer_state, layer_connmats_state) 
+                                in enumerate(zip(layers_state[1:], layers_connmats_state))]
+                layers_connmats_k = [[self.cfun(time_val,
+                                        layers_state[self.layers[ilayer].connections[iconn].sourceintid], 
+                                        connmat_state, layer_state, 
+                                        self.layers[ilayer].connections[iconn].learnparams)
                                     for iconn, connmat_state in enumerate(layer_connmats_state)]
-                                for ilayer, (layer_state, layer_connmats_state) in enumerate(zip(layers_state[1:], layers_connmats_state)) 
+                                for ilayer, (layer_state, layer_connmats_state) 
+                                in enumerate(zip(layers_state[1:], layers_connmats_state)) 
                                 if layer_connmats_state]
 
                 return layers_k, layers_connmats_k
@@ -157,7 +180,8 @@ class Model():
                                 for (layer_k0, layer_k) in zip(layers_k0, layers_k)]
                 layers_connmats_state = [[tf.add(connmat_k0, tf.scalar_mul(time_scaling, connmat_k))
                                     for (connmat_k0, connmat_k) in zip(layer_connmats_k0, layer_connmats_k)]
-                                for (layer_connmats_k0, layer_connmats_k) in zip(layers_connmats_k0, layers_connmats_k) 
+                                for (layer_connmats_k0, layer_connmats_k) 
+                                in zip(layers_connmats_k0, layers_connmats_k) 
                                 if layer_connmats_k0]
                 layers_state.insert(0, new_stim)
 
@@ -192,14 +216,21 @@ class Model():
                                                         tf.scalar_mul(2, layer_k2),
                                                         tf.scalar_mul(2, layer_k3),
                                                         layer_k4])))
-                            for (layer_k0, layer_k1, layer_k2, layer_k3, layer_k4) in zip(layers_k0, layers_k1, layers_k2, layers_k3, layers_k4)]
+                            for (layer_k0, layer_k1, layer_k2, layer_k3, layer_k4) 
+                            in zip(layers_k0, layers_k1, layers_k2, layers_k3, layers_k4)]
             layers_connmats_state = [[tf.add(connmat_k0, 
                             tf.multiply(dt/6,  tf.add_n([connmat_k1,
                                                         tf.scalar_mul(2, connmat_k2),
                                                         tf.scalar_mul(2, connmat_k3),
                                                         connmat_k4])))
-                                for (connmat_k0, connmat_k1, connmat_k2, connmat_k3, connmat_k4) in zip(layer_connmats_k0, layer_connmats_k1, layer_connmats_k2, layer_connmats_k3, layer_connmats_k4)]
-                            for (layer_connmats_k0, layer_connmats_k1, layer_connmats_k2, layer_connmats_k3, layer_connmats_k4) in zip(layers_connmats_k0, layers_connmats_k1, layers_connmats_k2, layers_connmats_k3, layers_connmats_k4) if layer_connmats_k0]
+                                for (connmat_k0, connmat_k1, connmat_k2, connmat_k3, connmat_k4) 
+                                in zip(layer_connmats_k0, layer_connmats_k1, 
+                                    layer_connmats_k2, layer_connmats_k3, layer_connmats_k4)]
+                            for (layer_connmats_k0, layer_connmats_k1, 
+                                layer_connmats_k2, layer_connmats_k3, layer_connmats_k4) 
+                            in zip(layers_connmats_k0, layers_connmats_k1, layers_connmats_k2, 
+                                layers_connmats_k3, layers_connmats_k4) 
+                            if layer_connmats_k0]
 
             return [layers_state, layers_connmats_state]
 
@@ -248,7 +279,7 @@ class Model():
             layer_states_real, layer_states_imag = tf.split(layers_states[ilayer], 2, axis=2)
             layers_states[ilayer] = tf.complex(layer_states_real, layer_states_imag)
             layer.params['freqs'], _ = tf.split(layer.params['freqs'], 2, axis=0)
-            layer.nosc = layer.nosc/2
+            layer.N = layer.N/2
             for iconn, conn in enumerate(layer.connections):
                 conn_matrixinit_real, conn_matrixinit_imag = tf.split(conn.matrixinit, 2, axis=1)
                 conn.matrixinit = tf.complex(conn_matrixinit_real, conn_matrixinit_imag)
@@ -273,7 +304,7 @@ class Model():
             layer.initconds = tf.tile(tf.expand_dims(tf.concat([tf.math.real(layer.initconds), 
                                                     tf.math.imag(layer.initconds)], axis=0), axis=0),
                                         tf.constant([self.stim.ndatapoints.numpy(),1], dtype=tf.int32))
-            layer.nosc = layer.nosc*2
+            layer.N = layer.N*2
             for conn in layer.connections:
                 conn.matrixinit = tf.concat([tf.math.real(conn.matrixinit), 
                                             tf.math.imag(conn.matrixinit)], axis=1)
