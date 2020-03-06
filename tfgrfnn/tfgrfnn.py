@@ -41,10 +41,10 @@ class stimulus():
 
         self.name = name
         self.values = values
-        shape = tf.shape(self.values)
-        self.ndatapoints = shape[0]
-        self.nsamps = shape[1]
-        self.nchannels = shape[2]
+        vshape = tf.shape(self.values)
+        self.ndatapoints = vshape[0]
+        self.nsamps = vshape[1]
+        self.nchannels = vshape[2]
         self.fs = fs
         self.dt = 1.0/self.fs
         self.dur = self.nsamps/self.fs
@@ -220,8 +220,8 @@ class Model():
         layers_state, layers_connmats_state = self.list_layers_state_and_layers_connmats_state()
         layers_states, layers_connmats_states = self.odeRK4(layers_state, layers_connmats_state)
         if self.zfun == xdot_ydot:
-            layers_states, layers_connmats_states = self.concat2complex()
-        self.save_layers_connmats_states()
+            layers_states, layers_connmats_states = self.concat2complex(layers_states, layers_connmats_states)
+        self.save_layers_connmats_states(layers_states, layers_connmats_states)
         self.delete_layer_enumeration()
         return self
     
@@ -232,31 +232,31 @@ class Model():
             for conn in layer.connections:
                 del conn.sourceintid
 
-    def concat2complex(self, layer_states, layers_connmats_states):
-        stim_values_real, stim_values_imag = tf.split(self.stim.values, 2, axis=1)
+    def save_layers_connmats_states(self, layers_states, layers_connmats_states):
+        for ilayer, layer, in enumerate(self.layers):
+            layer.states = tf.transpose(layers_states[ilayer],(1,2,0))
+            for iconn, conn in enumerate(layer.connections):
+                if conn.learnparams['learntypeint'] != 0:
+                    conn.matrixstates = tf.transpose(layers_connmats_state[ilayer][iconn],(1,2,0))
+
+    def concat2complex(self, layers_states, layers_connmats_states):
+        stim_values_real, stim_values_imag = tf.split(self.stim.values, 2, axis=2)
         self.stim.values = tf.complex(stim_values_real, stim_values_imag)
         for ilayer, layer in enumerate(self.layers):
-            layer_initconds_real, layer_initconds_imag = tf.split(layer.initconds, 2, axis=0)
+            layer_initconds_real, layer_initconds_imag = tf.split(tf.squeeze(layer.initconds[0,:]), 2, axis=0)
             layer.initconds = tf.complex(layer_initconds_real, layer_initconds_imag)
-            layer_states_real, layer_states_imag = tf.split(layers_states[ilayer], 2, axis=1)
-            layers_states[ilayer] = tf.squeeze(tf.complex(layer_states_real, layer_states_imag))
+            layer_states_real, layer_states_imag = tf.split(layers_states[ilayer], 2, axis=2)
+            layers_states[ilayer] = tf.complex(layer_states_real, layer_states_imag)
             layer.params['freqs'], _ = tf.split(layer.params['freqs'], 2, axis=0)
             layer.nosc = layer.nosc/2
             for iconn, conn in enumerate(layer.connections):
-                conn_matrixinit_real, conn_matrixinit_imag = tf.split(conn.matrixinit, 2, axis=0)
+                conn_matrixinit_real, conn_matrixinit_imag = tf.split(conn.matrixinit, 2, axis=1)
                 conn.matrixinit = tf.complex(conn_matrixinit_real, conn_matrixinit_imag)
                 if conn.learnparams['learntypeint'] != 0:
                     connmat_states_real, connmat_states_imag = tf.split(layers_connmats_state[ilayer][iconn], 
-                                                                                                    2, axis=1)
+                                                                                                    2, axis=2)
                     layers_connmats_states[ilayer][iconn] = tf.complex(connmat_states_real, connmat_states_imag)
         return layers_states, layers_connmats_states
-
-    def save_layers_connmats_states():
-        for ilayer, layer, in enumerate(self.layers):
-            layer.states = layers_states[ilayer]
-            for iconn, conn in enmerate(layer.connections):
-                if conn.learnparams[''] != 0:
-                    conn.matrixstates = layers_connmats_state[ilayer][iconn]
 
     def list_layers_state_and_layers_connmats_state(self):
         layers_state = [layer.initconds for layer in self.layers]
@@ -267,14 +267,16 @@ class Model():
 
     def complex2concat(self):
         self.stim.values = tf.concat([tf.math.real(self.stim.values), 
-                                      tf.math.imag(self.stim.values)], axis=1)
+                                      tf.math.imag(self.stim.values)], axis=2)
         for layer in self.layers:
             layer.params['freqs'] = tf.concat([layer.params['freqs'], layer.params['freqs']], axis=0)
-            layer.initconds = tf.concat([tf.math.real(layer.initconds), tf.math.imag(layer.initconds)], axis=0)
+            layer.initconds = tf.tile(tf.expand_dims(tf.concat([tf.math.real(layer.initconds), 
+                                                    tf.math.imag(layer.initconds)], axis=0), axis=0),
+                                        tf.constant([self.stim.ndatapoints.numpy(),1], dtype=tf.int32))
             layer.nosc = layer.nosc*2
             for conn in layer.connections:
                 conn.matrixinit = tf.concat([tf.math.real(conn.matrixinit), 
-                                            tf.math.imag(conn.matrixinit)], axis=0)
+                                            tf.math.imag(conn.matrixinit)], axis=1)
 
     def enumerate_layers(self):
         self.stim.intid = 0

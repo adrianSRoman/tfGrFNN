@@ -20,7 +20,7 @@ l1 = tg.neurons(name='l1',
 
 s1 = tg.stimulus(name='s1', values=tf.expand_dims(tf.expand_dims(0.25*tf.complex(tf.math.cos(2*np.pi*time), tf.math.sin(2*np.pi*time)),0),2), fs=int(1/dt))
 
-l1 = tg.connect(source=s1, target=l1, matrixinit=tf.constant(1.0+1j*1.0, dtype=tf.complex64, shape=(1,1)))
+l1 = tg.connect(source=s1, target=l1, matrixinit=tf.constant(1.0+1j*1.0, dtype=tf.complex64, shape=(1,nosc)))
 
 GrFNN = tg.Model(name='GrFNN', layers=[l1], stim=s1)
 
@@ -29,8 +29,8 @@ GrFNN = GrFNN.integrate()
 toc = t.time() - tic
 print(toc)
 
-plt.semilogx(GrFNN.layers[0].freqs,np.abs(GrFNN.layers[0].allsteps[-1]))
-plt.ylim([0, 1.3*np.max(np.abs(GrFNN.layers[0].allsteps[-1]))])
+plt.semilogx(GrFNN.layers[0].params['freqs'],np.abs(GrFNN.layers[0].states[0,:,-1]))
+plt.ylim([0, 1.3*np.max(np.abs(GrFNN.layers[0].states[0,:,-1]))])
 plt.grid()
 plt.xlabel('Oscillator natural frequency (Hz)')
 plt.ylabel('Manitude')
