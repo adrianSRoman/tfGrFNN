@@ -15,7 +15,7 @@ l1 = tg.neurons(name='l1',
                         'beta1':tf.constant(-1.0, dtype=tf.float32),
                         'beta2':tf.constant(0.0, dtype=tf.float32),
                         'epsilon':tf.constant(0.0, dtype=tf.float32)}, 
-                freqs=tf.constant(np.logspace(np.log10(0.5),np.log(2.0),nosc),dtype=tf.float32), 
+                freqs=tf.constant(np.logspace(np.log10(0.5),np.log10(2.0),nosc),dtype=tf.float32), 
                 initconds=tf.constant(0.0+1j*0.1, dtype=tf.complex64, shape=(nosc,)))
 
 s1 = tg.stimulus(name='s1', values=tf.expand_dims(tf.expand_dims(0.25*tf.complex(tf.math.cos(2*np.pi*time), tf.math.sin(2*np.pi*time)),0),2), fs=int(1/dt))
