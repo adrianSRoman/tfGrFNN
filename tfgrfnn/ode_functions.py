@@ -1,6 +1,5 @@
 import tensorflow as tf
 import numpy as np
-import tfgrfnn as tg
 
 def xdot_ydot(t, xt_yt, connmats_state, connections, sources_state, alpha=None, beta1=None, beta2=None, epsilon=None, freqs= None):
 
