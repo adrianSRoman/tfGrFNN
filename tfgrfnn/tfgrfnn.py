@@ -76,31 +76,25 @@ class connection():
                     source = None,
                     target = None,
                     matrixinit = None,
-                    learnparams = None):
+                    params = None):
 
-        learnparams = learnparams if learnparams else default_connections_params
+        params = params if params else default_connections_params
 
         self.name = name
         self.source = source
         self.target = target
-        self.learnparams = learnparams
+        self.params = params
         self.matrixinit = matrixinit
-        if self.learnparams['learntype'] == 'nolearning' and isinstance(self.source, stimulus):
-            self.learnparams['freqss'] = tf.constant(0, dtype=tf.float32, shape=(self.source.nchannels,))
-            self.learnparams['freqst'] = tf.constant(0, dtype=tf.float32, shape=(self.target.N,))
-            self.learnparams['learntypeint'] = tf.constant(0)
-        elif self.learnparams['learntype'] == 'nolearning' and isinstance(self.source, neurons):
-            self.learnparams['freqss'] = tf.constant(0, dtype=tf.float32, shape=(self.source.N,))
-            self.learnparams['freqst'] = tf.constant(0, dtype=tf.float32, shape=(self.target.N,))
-            self.learnparams['learntypeint'] = tf.constant(0)
-        elif isinstance(self.source, stimulus):
-            self.learnparams['freqss'] = tf.constant(0, dtype=tf.float32, shape=(self.source.nchannels,))
-            self.learnparams['freqst'] = self.target.freqs
-            self.learnparams['learntypeint'] = tf.constant(1)
+        if isinstance(self.source, stimulus):
+            self.params['freqss'] = tf.constant(0, dtype=tf.float32, shape=(self.source.nchannels,))
+            self.params['freqst'] = self.target.params['freqs']
         elif isinstance(self.source, neurons):
-            self.learnparams['freqss'] = self.source.freqs
-            self.learnparams['freqst'] = self.target.freqs
-            self.learnparams['learntypeint'] = tf.constant(1)
+            self.params['freqss'] = self.source.params['freqs']
+            self.params['freqst'] = self.target.params['freqs']
+        if self.params['type'] == '1freq':
+            self.params['typeint'] = tf.constant(0)
+        elif self.params['type'] == 'allfreq':
+            self.params['typeint'] = tf.constant(6)
 
     def __repr__(self):
         return "<Connection from %s to %s with matrix of size %s>" % (self.source.name, 
@@ -109,24 +103,25 @@ class connection():
 
 def default_connection_params():
 
-    default_params = {'learntype':'nolearning',
-                       'lambda_':tf.constant(0.0, dtype=tf.float32),
-                       'mu1':tf.constant(0.0, dtype=tf.float32), 
-                       'mu2':tf.constant(0.0, dtype=tf.float32), 
-                       'epsilon':tf.constant(0.0, dtype=tf.float32),
-                       'kappa':tf.constant(0.0, dtype=tf.float32),
-                       'weight':tf.constant(1.0, dtype=tf.float32)}
+    default_params = {'type':'1freq',
+                        'learn':False,
+                        'lambda_':tf.constant(0.0, dtype=tf.float32),
+                        'mu1':tf.constant(0.0, dtype=tf.float32), 
+                        'mu2':tf.constant(0.0, dtype=tf.float32), 
+                        'epsilon':tf.constant(0.0, dtype=tf.float32),
+                        'kappa':tf.constant(0.0, dtype=tf.float32),
+                        'weight':tf.constant(1.0, dtype=tf.float32)}
 
     return default_params
 
-def connect(connname = '', source = None, target = None, matrixinit = None, learnparams = None):
+def connect(connname = '', source = None, target = None, matrixinit = None, params = None):
 
     target.connections = target.connections + \
                             [connection(name = connname,
                                         source=source,
                                         target=target, 
                                         matrixinit=matrixinit, 
-                                        learnparams=default_connection_params())]
+                                        params=default_connection_params())]
 
     return target
        
@@ -166,7 +161,7 @@ class Model():
                 layers_connmats_k = [[self.cfun(time_val,
                                         layers_state[self.layers[ilayer].connections[iconn].sourceintid], 
                                         connmat_state, layer_state, 
-                                        self.layers[ilayer].connections[iconn].learnparams)
+                                        self.layers[ilayer].connections[iconn].params)
                                     for iconn, connmat_state in enumerate(layer_connmats_state)]
                                 for ilayer, (layer_state, layer_connmats_state) 
                                 in enumerate(zip(layers_state[1:], layers_connmats_state)) 
@@ -267,7 +262,7 @@ class Model():
         for ilayer, layer, in enumerate(self.layers):
             layer.states = tf.transpose(layers_states[ilayer],(1,2,0))
             for iconn, conn in enumerate(layer.connections):
-                if conn.learnparams['learntypeint'] != 0:
+                if conn.params['learn']:
                     conn.matrixstates = tf.transpose(layers_connmats_state[ilayer][iconn],(1,2,0))
 
     def concat2complex(self, layers_states, layers_connmats_states):
@@ -283,7 +278,7 @@ class Model():
             for iconn, conn in enumerate(layer.connections):
                 conn_matrixinit_real, conn_matrixinit_imag = tf.split(conn.matrixinit, 2, axis=1)
                 conn.matrixinit = tf.complex(conn_matrixinit_real, conn_matrixinit_imag)
-                if conn.learnparams['learntypeint'] != 0:
+                if conn.params['learn']:
                     connmat_states_real, connmat_states_imag = tf.split(layers_connmats_state[ilayer][iconn], 
                                                                                                     2, axis=2)
                     layers_connmats_states[ilayer][iconn] = tf.complex(connmat_states_real, connmat_states_imag)

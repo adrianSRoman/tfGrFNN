@@ -24,9 +24,9 @@ def xdot_ydot(t, xt_yt, connmats_state, connections, sources_state, alpha=None, 
                                 tf.subtract(tf.constant(1.0, dtype=tf.float32), 
                                     tf.multiply(epsilon, x2tplusy2t_x2tplusy2t)))])
 
-    csrt_csit = tf.add_n([tf.multiply(connections[iconn].learnparams['weight'], compute_input(connmat_state, 
+    csrt_csit = tf.add_n([tf.multiply(connections[iconn].params['weight'], compute_input(connmat_state, 
                             sources_state[connections[iconn].sourceintid], 
-                            connections[iconn].learnparams['learntypeint']))
+                            connections[iconn].params['typeint']))
                         for iconn, connmat_state in enumerate(connmats_state)]) if connmats_state else 0
             
     dxdt_dydt = tf.multiply(freqs, tf.add(xtnew_ytnew, csrt_csit))
@@ -34,18 +34,7 @@ def xdot_ydot(t, xt_yt, connmats_state, connections, sources_state, alpha=None, 
     return dxdt_dydt
 
 
-def compute_input(connmat_state, source_state, learntypeint):
-
-    def compute_input_nolearning(srt_sit=source_state, crt_cit=connmat_state):
-
-        srt, sit = tf.split(srt_sit, 2, axis=1)
-        crt, cit = tf.split(crt_cit, 2, axis=1)
-        csrt = tf.matmul(srt, crt) - tf.matmul(sit, cit)
-        csit = tf.matmul(sit, crt) + tf.matmul(srt, cit)
-
-        csrt_csit = tf.concat([csrt, csit], axis=1)
-
-        return csrt_csit 
+def compute_input(connmat_state, source_state, typeint):
 
     def compute_input_1freq(srt_sit=source_state, crt_cit=connmat_state):
 
@@ -58,27 +47,39 @@ def compute_input(connmat_state, source_state, learntypeint):
 
         return csrt_csit 
 
-    csrt_csit = tf.switch_case(learntypeint,
-                                branch_fns={0: compute_input_nolearning,
-                                            1: compute_input_1freq})
+    def compute_input_allfreq(srt_sit=source_state, crt_cit=connmat_state):
+
+        srt, sit = tf.split(srt_sit, 2, axis=1)
+        crt, cit = tf.split(crt_cit, 2, axis=1)
+        csrt = tf.matmul(srt, crt) - tf.matmul(sit, cit)
+        csit = tf.matmul(sit, crt) + tf.matmul(srt, cit)
+
+        csrt_csit = tf.concat([csrt, csit], axis=1)
+
+        return csrt_csit 
+
+    csrt_csit = tf.switch_case(typeint,
+                                branch_fns={0: compute_input_1freq,
+                                            1: compute_input_allfreq})
 
     return csrt_csit
 
-def crdot_cidot(t, xst_yst, crt_cit, xtt_ytt, learnparams):
+def crdot_cidot(t, xst_yst, crt_cit, xtt_ytt, params):
 
-    def nolearning(t=t, xst_yst=xst_yst, crt_cit=crt_cit, xtt_ytt=xtt_ytt, learnparams=learnparams):
+    def nolearning(crt_cit=crt_cit):
         
         return tf.constant(0, dtype=tf.float32, shape=crt_cit.shape)
+
     '''
-    def learn_1freq(t=t, xst_yst=xst_yst, crt_cit=crt_cit, xtt_ytt=xtt_ytt, learnparams=learnparams):
+    def learn_1freq(t=t, xst_yst=xst_yst, crt_cit=crt_cit, xtt_ytt=xtt_ytt, params=params):
         
-        lambda_ = learnparams['lambda_']
-        mu1 = learnparams['mu1']
-        mu2 = learnparams['mu2']
-        kappa = learnparams['kappa']
-        epsilon = learnparams['epsilon']
-        freqss = tf.expand_dims(learnparams['freqss'], 0)
-        freqst = tf.expand_dims(learnparams['freqst'], -1)
+        lambda_ = params['lambda_']
+        mu1 = params['mu1']
+        mu2 = params['mu2']
+        kappa = params['kappa']
+        epsilon = params['epsilon']
+        freqss = tf.expand_dims(params['freqss'], 0)
+        freqst = tf.expand_dims(params['freqst'], -1)
 
         xst, yst = tf.split(xst_yst, 2, axis=0)
         crt, cit = tf.split(crt_cit, 2, axis=0)
@@ -112,10 +113,13 @@ def crdot_cidot(t, xst_yst, crt_cit, xtt_ytt, learnparams):
         return dcrdt_dcidt
     '''
 
-    learntype = learnparams['learntypeint']
-
-    dcrdt_dcidt = tf.switch_case(learntype,
-                                    branch_fns={0: nolearning})
-                                                #1: learn_1freq})
+    if params['learn']:
+        dcrdt_dcidt = nolearning(crt_cit) 
+    #    learntype = params['typeint']
+    #    dcrdt_dcidt = tf.switch_case(learntype,
+    #                                    branch_fns={0: learn_1freq,
+    #                                                2: learn_allfreq})
+    else:
+        dcrdt_dcidt = nolearning(crt_cit) 
 
     return dcrdt_dcidt
