@@ -57,7 +57,6 @@ def compute_input(connmat_state, source_state, typeint):
 
         return csrt_csit 
 
-    tf.print(typeint)
     csrt_csit = tf.switch_case(typeint,
                                 branch_fns={0: compute_input_1freq,
                                             1: compute_input_allfreq})
