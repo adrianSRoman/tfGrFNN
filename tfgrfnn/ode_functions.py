@@ -83,8 +83,8 @@ def compute_input(connmat_state, source_state, target_state, typeint, epsilon):
 
         Pnr = tf.multiply(Pn1r,Pn2r) - tf.matmul(Pn1i,Pn2i) 
         Pni = tf.multiply(Pn1i,Pn2r) + tf.matmul(Pn1r,Pn2i) 
-        crt = tf.multiply(Pnr,Ar) - tf.matmul(Pni,Ai)
-        cit = tf.multiply(Pni,Ar) + tf.matmul(Pnr,Ai)
+        srt = tf.multiply(Pnr,Ar) - tf.matmul(Pni,Ai)
+        sit = tf.multiply(Pni,Ar) + tf.matmul(Pnr,Ai)
 
         csrt = tf.matmul(srt, crt) - tf.matmul(sit, cit)
         csit = tf.matmul(sit, crt) + tf.matmul(srt, cit)
