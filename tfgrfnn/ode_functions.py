@@ -71,12 +71,12 @@ def compute_input(connmat_state, source_state, target_state, typeint, epsilon):
         Pn1i = tf.divide(si2,
                         Pdenominator)
         Pn2r = tf.divide(tf.add(tf.constant(1.0, dtype=tf.float32),
-                                tf.multiply(-srt,sqrterp)),
+                                tf.multiply(-srt,sqrteps)),
                         Pdenominator)
         Pn2i = tf.divide(-tf.multiply(sit, sqrteps),
                         Pdenominator)
         Ar = tf.divide(tf.add(tf.constant(1.0, dtype=tf.float32),
-                                tf.multiply(-trt,sqrterp)),
+                                tf.multiply(-trt,sqrteps)),
                         Adenominator)
         Ai = tf.divide(-tf.multiply(tit, sqrteps),
                         Adenominator)
