@@ -94,7 +94,7 @@ class connection():
         if self.params['type'] == '1freq':
             self.params['typeint'] = tf.constant(0)
         elif self.params['type'] == 'allfreq':
-            self.params['typeint'] = tf.constant(6)
+            self.params['typeint'] = tf.constant(1)
 
     def __repr__(self):
         return "<Connection from %s to %s with matrix of size %s>" % (self.source.name, 
