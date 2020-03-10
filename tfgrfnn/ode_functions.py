@@ -81,7 +81,7 @@ def compute_input(connmat_state, source_state, target_state, typeint, epsilon):
         Ai = tf.divide(-tf.multiply(tit, sqrteps),
                         Adenominator)
 
-        Pnr = tf.multiply(Pn1r,Pn2r) - tf.mutliply(Pn1i,Pn2i) 
+        Pnr = tf.multiply(Pn1r,Pn2r) - tf.multiply(Pn1i,Pn2i) 
         Pni = tf.multiply(Pn1i,Pn2r) + tf.multiply(Pn1r,Pn2i) 
         print(Pnr)
         print(Pni)
