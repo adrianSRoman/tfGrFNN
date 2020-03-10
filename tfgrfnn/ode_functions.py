@@ -24,8 +24,8 @@ def xdot_ydot(t, xt_yt, connmats_state, connections, sources_state, alpha=None, 
                                     tf.multiply(epsilon, x2tplusy2t_x2tplusy2t)))])
 
     csrt_csit = tf.add_n([tf.multiply(connections[iconn].params['weight'], compute_input(connmat_state, 
-                            sources_state[connections[iconn].sourceintid], 
-                            connections[iconn].params['typeint']))
+                            sources_state[connections[iconn].sourceintid],
+                            xt_yt, connections[iconn].params['typeint'], epsilon))
                         for iconn, connmat_state in enumerate(connmats_state)]) if connmats_state else 0
             
     dxdt_dydt = tf.multiply(freqs, tf.add(xtnew_ytnew, csrt_csit))
@@ -33,7 +33,7 @@ def xdot_ydot(t, xt_yt, connmats_state, connections, sources_state, alpha=None, 
     return dxdt_dydt
 
 
-def compute_input(connmat_state, source_state, typeint):
+def compute_input(connmat_state, source_state, target_state, typeint, epsilon):
 
     def compute_input_1freq(srt_sit=source_state, crt_cit=connmat_state):
 
@@ -46,10 +46,46 @@ def compute_input(connmat_state, source_state, typeint):
 
         return csrt_csit 
 
-    def compute_input_allfreq(srt_sit=source_state, crt_cit=connmat_state):
+    def compute_input_allfreq(srt_sit=source_state, trt_tit=target_state, 
+                                crt_cit=connmat_state, epsilon=epsilon):
 
         srt, sit = tf.split(srt_sit, 2, axis=1)
+        trt, tit = tf.split(trt_tit, 2, axis=1)
         crt, cit = tf.split(crt_cit, 2, axis=1)
+
+        sqrteps = tf.sqrt(epsilon)
+        sr2 = tf.pow(srt, 2)
+        si2 = tf.pow(sit, 2)
+        ti2 = tf.pow(tit, 2)
+        one_min_re2 = tf.pow(tf.subtract(tf.constant(1.0, dtype=tf.float32),
+                                    tf.multiply(srt, sqrteps)), 2)
+        Pdenominator = tf.add(one_min_re2, tf.multiply(si2, epsilon))
+        one_min_re2 = tf.pow(tf.subtract(tf.constant(1.0, dtype=tf.float32),
+                                    tf.multiply(trt, sqrteps)), 2)
+        Adenominator = tf.add(one_min_re2, tf.multiply(ti2, epsilon))
+
+        Pn1r = tf.divide(tf.add_n([tf.multiply(-sr2, sqrteps),
+                                    srt,
+                                    tf.multiply(-si2, sqrteps)]),
+                        Pdenominator)
+        Pn1i = tf.divide(si2,
+                        Pdenominator)
+        Pn2r = tf.divide(tf.add(tf.constant(1.0, dtype=tf.float32),
+                                tf.multiply(-srt,sqrterp)),
+                        Pdenominator)
+        Pn2i = tf.divide(-tf.multiply(sit, sqrteps),
+                        Pdenominator)
+        Ar = tf.divide(tf.add(tf.constant(1.0, dtype=tf.float32),
+                                tf.multiply(-trt,sqrterp)),
+                        Adenominator)
+        Ai = tf.divide(-tf.multiply(tit, sqrteps),
+                        Adenominator)
+
+        Pnr = tf.multiply(Pn1r,Pn2r) - tf.matmul(Pn1i,Pn2i)) 
+        Pni = tf.multiply(Pn1i,Pn2r) + tf.matmul(Pn1r,Pn2i)) 
+        crt = tf.multiply(Pnr,Ar) - tf.matmul(Pni,Ai)
+        cit = tf.multiply(Pni,Ar) + tf.matmul(Pnr,Ai)
+
         csrt = tf.matmul(srt, crt) - tf.matmul(sit, cit)
         csit = tf.matmul(sit, crt) + tf.matmul(srt, cit)
 
@@ -117,7 +153,7 @@ def crdot_cidot(t, xst_yst, crt_cit, xtt_ytt, params):
     #    learntype = params['typeint']
     #    dcrdt_dcidt = tf.switch_case(learntype,
     #                                    branch_fns={0: learn_1freq,
-    #                                                2: learn_allfreq})
+    #                                                1: learn_allfreq})
     else:
         dcrdt_dcidt = nolearning(crt_cit) 
 
