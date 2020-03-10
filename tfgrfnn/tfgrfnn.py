@@ -123,7 +123,7 @@ def connect(connname = '', source = None, target = None, matrixinit = None, para
                                         source=source,
                                         target=target, 
                                         matrixinit=matrixinit, 
-                                        params=default_connection_params())]
+                                        params=params)]
 
     return target
        
