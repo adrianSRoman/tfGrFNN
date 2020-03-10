@@ -26,10 +26,12 @@ class neurons():
 
     def __init__(self, name = '', 
                     osctype = 'grfnn',
-                    params = default_neuron_params(),
+                    params = None,
                     freqs = default_freqs(),
                     initconds = tf.constant(0, dtype=tf.complex64, shape=(256,))):
         
+        params = params if params else default_neuron_params()
+
         self.name = name
         self.osctype = osctype
         self.params = params
@@ -78,7 +80,7 @@ class connection():
                     matrixinit = None,
                     params = None):
 
-        params = params if params else default_connections_params
+        params = params if params else default_connections_params()
 
         self.name = name
         self.source = source
