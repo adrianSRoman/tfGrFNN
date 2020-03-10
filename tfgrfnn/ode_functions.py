@@ -86,6 +86,9 @@ def compute_input(connmat_state, source_state, target_state, typeint, epsilon):
         print(Pnr)
         print(Pni)
         input()
+        print(Ar)
+        print(Ai)
+        input()
         srt = tf.multiply(Pnr,Ar) - tf.matmul(Pni,Ai)
         sit = tf.multiply(Pni,Ar) + tf.matmul(Pnr,Ai)
 
