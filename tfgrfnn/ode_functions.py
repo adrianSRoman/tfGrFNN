@@ -48,8 +48,6 @@ def compute_input(connmat_state, source_state, target_state, typeint, epsilon):
 
     def compute_input_allfreq(srt_sit=source_state, trt_tit=target_state, 
                                 crt_cit=connmat_state, epsilon=epsilon):
-        print('allfreq!!!!!')
-        input()
 
         srt, sit = tf.split(srt_sit, 2, axis=1)
         trt, tit = tf.split(trt_tit, 2, axis=1)
@@ -59,24 +57,25 @@ def compute_input(connmat_state, source_state, target_state, typeint, epsilon):
         sr2 = tf.pow(srt, 2)
         si2 = tf.pow(sit, 2)
         ti2 = tf.pow(tit, 2)
+
         one_min_re2 = tf.pow(tf.subtract(tf.constant(1.0, dtype=tf.float32),
                                     tf.multiply(srt, sqrteps)), 2)
         Pdenominator = tf.add(one_min_re2, tf.multiply(si2, epsilon))
-        one_min_re2 = tf.pow(tf.subtract(tf.constant(1.0, dtype=tf.float32),
-                                    tf.multiply(trt, sqrteps)), 2)
-        Adenominator = tf.add(one_min_re2, tf.multiply(ti2, epsilon))
-
         Pn1r = tf.divide(tf.add_n([tf.multiply(-sr2, sqrteps),
                                     srt,
                                     tf.multiply(-si2, sqrteps)]),
                         Pdenominator)
-        Pn1i = tf.divide(si2,
+        Pn1i = tf.divide(sit,
                         Pdenominator)
         Pn2r = tf.divide(tf.add(tf.constant(1.0, dtype=tf.float32),
                                 tf.multiply(-srt,sqrteps)),
                         Pdenominator)
         Pn2i = tf.divide(-tf.multiply(sit, sqrteps),
                         Pdenominator)
+
+        one_min_re2 = tf.pow(tf.subtract(tf.constant(1.0, dtype=tf.float32),
+                                    tf.multiply(trt, sqrteps)), 2)
+        Adenominator = tf.add(one_min_re2, tf.multiply(ti2, epsilon))
         Ar = tf.divide(tf.add(tf.constant(1.0, dtype=tf.float32),
                                 tf.multiply(-trt,sqrteps)),
                         Adenominator)
