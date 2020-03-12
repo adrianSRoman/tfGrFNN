@@ -48,6 +48,8 @@ def compute_input(connmat_state, source_state, target_state, typeint, epsilon):
 
     def compute_input_allfreq(srt_sit=source_state, trt_tit=target_state, 
                                 crt_cit=connmat_state, epsilon=epsilon):
+        print('allfreq!!!!!')
+        input()
 
         srt, sit = tf.split(srt_sit, 2, axis=1)
         trt, tit = tf.split(trt_tit, 2, axis=1)
