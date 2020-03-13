@@ -3,7 +3,7 @@ import numpy as np
 
 def xdot_ydot(t, xt_yt, connmats_state, connections, sources_state, alpha=None, beta1=None, beta2=None, epsilon=None, freqs= None):
 
-    omega = tf.constant(2*np.pi, dtype=tf.float32)
+    omega = tf.constant(2*np.pi, dtype=tf.float16)
 
     xt, yt = tf.split(xt_yt, 2, axis=1)
     minusyt_plusxt = tf.concat([tf.multiply(-1.0,yt), xt], axis=1)
@@ -20,7 +20,7 @@ def xdot_ydot(t, xt_yt, connmats_state, connections, sources_state, alpha=None, 
                             tf.divide(
                                 tf.multiply(tf.multiply(epsilon, beta2), 
                                     tf.multiply(xt_yt, x2tplusy2tsquared_x2tplusy2tsquared)),
-                                tf.subtract(tf.constant(1.0, dtype=tf.float32), 
+                                tf.subtract(tf.constant(1.0, dtype=tf.float16), 
                                     tf.multiply(epsilon, x2tplusy2t_x2tplusy2t)))])
 
     csrt_csit = tf.add_n([tf.multiply(connections[iconn].params['weight'], compute_input(connmat_state, 
@@ -58,7 +58,7 @@ def compute_input(connmat_state, source_state, target_state, typeint, epsilon):
         si2 = tf.pow(sit, 2)
         ti2 = tf.pow(tit, 2)
 
-        one_min_re2 = tf.pow(tf.subtract(tf.constant(1.0, dtype=tf.float32),
+        one_min_re2 = tf.pow(tf.subtract(tf.constant(1.0, dtype=tf.float16),
                                     tf.multiply(srt, sqrteps)), 2)
         Pdenominator = tf.add(one_min_re2, tf.multiply(si2, epsilon))
         Pn1r = tf.divide(tf.add_n([tf.multiply(-sr2, sqrteps),
@@ -67,16 +67,16 @@ def compute_input(connmat_state, source_state, target_state, typeint, epsilon):
                         Pdenominator)
         Pn1i = tf.divide(sit,
                         Pdenominator)
-        Pn2r = tf.divide(tf.add(tf.constant(1.0, dtype=tf.float32),
+        Pn2r = tf.divide(tf.add(tf.constant(1.0, dtype=tf.float16),
                                 tf.multiply(-srt,sqrteps)),
                         Pdenominator)
         Pn2i = tf.divide(-tf.multiply(sit, sqrteps),
                         Pdenominator)
 
-        one_min_re2 = tf.pow(tf.subtract(tf.constant(1.0, dtype=tf.float32),
+        one_min_re2 = tf.pow(tf.subtract(tf.constant(1.0, dtype=tf.float16),
                                     tf.multiply(trt, sqrteps)), 2)
         Adenominator = tf.add(one_min_re2, tf.multiply(ti2, epsilon))
-        Ar = tf.divide(tf.add(tf.constant(1.0, dtype=tf.float32),
+        Ar = tf.divide(tf.add(tf.constant(1.0, dtype=tf.float16),
                                 tf.multiply(-trt,sqrteps)),
                         Adenominator)
         Ai = tf.divide(-tf.multiply(tit, sqrteps),
@@ -104,7 +104,7 @@ def crdot_cidot(t, xst_yst, crt_cit, xtt_ytt, params):
 
     def nolearning(crt_cit=crt_cit):
         
-        return tf.constant(0, dtype=tf.float32, shape=crt_cit.shape)
+        return tf.constant(0, dtype=tf.float16, shape=crt_cit.shape)
 
     '''
     def learn_1freq(t=t, xst_yst=xst_yst, crt_cit=crt_cit, xtt_ytt=xtt_ytt, params=params):
@@ -131,7 +131,7 @@ def crdot_cidot(t, xst_yst, crt_cit, xtt_ytt, params):
                             tf.multiply(mu1, tf.multiply(crt_cit, cr2tplusci2t_cr2tplusci2t)),
                             tf.divide(tf.multiply(tf.multiply(epsilon, mu2), 
                                         tf.multiply(crt_cit, cr2tplusci2tsquared_cr2tplusci2tsquared)),
-                                    tf.subtract(tf.constant(1.0, dtype=tf.float32), 
+                                    tf.subtract(tf.constant(1.0, dtype=tf.float16), 
                                         tf.multiply(epsilon, cr2tplusci2t_cr2tplusci2t))),
                             tf.multiply(kappa, tf.concat([tf.add(tf.matmul(tf.expand_dims(xtt,-1), 
                                                                             tf.expand_dims(xst,0)), 

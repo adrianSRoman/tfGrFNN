@@ -9,17 +9,17 @@ from ode_functions import xdot_ydot, crdot_cidot
 
 def default_neuron_params():
 
-    default_params = {'alpha':tf.constant(0.0, dtype=tf.float32),
-                    'beta1':tf.constant(0.0, dtype=tf.float32),
-                    'beta2':tf.constant(0.0, dtype=tf.float32),
-                    'epsilon':tf.constant(0.0, dtype=tf.float32)}
+    default_params = {'alpha':tf.constant(0.0, dtype=tf.float16),
+                    'beta1':tf.constant(0.0, dtype=tf.float16),
+                    'beta2':tf.constant(0.0, dtype=tf.float16),
+                    'epsilon':tf.constant(0.0, dtype=tf.float16)}
 
     return default_params
 
 def default_freqs():
 
     freqs = tf.constant(np.logspace(np.log10(0.5), np.log10(2.0), 256), 
-                        dtype=tf.float32)
+                        dtype=tf.float16)
     return freqs
 
 class neurons():
@@ -28,7 +28,7 @@ class neurons():
                     osctype = 'grfnn',
                     params = None,
                     freqs = default_freqs(),
-                    initconds = tf.constant(0, dtype=tf.complex64, shape=(256,))):
+                    initconds = tf.constant(0, dtype=tf.complex32, shape=(256,))):
         
         params = params if params else default_neuron_params()
 
@@ -51,7 +51,7 @@ class neurons():
 class stimulus():
 
     def __init__(self, name = '', 
-                    values = tf.constant(0, dtype=tf.complex64, shape=(1,1,1)),
+                    values = tf.constant(0, dtype=tf.complex32, shape=(1,1,1)),
                     fs = tf.constant(1.0)):
 
         self.name = name
@@ -88,7 +88,7 @@ class connection():
         self.params = params
         self.matrixinit = matrixinit
         if isinstance(self.source, stimulus):
-            self.params['freqss'] = tf.constant(0, dtype=tf.float32, shape=(self.source.nchannels,))
+            self.params['freqss'] = tf.constant(0, dtype=tf.float16, shape=(self.source.nchannels,))
             self.params['freqst'] = self.target.params['freqs']
         elif isinstance(self.source, neurons):
             self.params['freqss'] = self.source.params['freqs']
@@ -107,12 +107,12 @@ def default_connection_params():
 
     default_params = {'type':'1freq',
                         'learn':False,
-                        'lambda_':tf.constant(0.0, dtype=tf.float32),
-                        'mu1':tf.constant(0.0, dtype=tf.float32), 
-                        'mu2':tf.constant(0.0, dtype=tf.float32), 
-                        'epsilon':tf.constant(0.0, dtype=tf.float32),
-                        'kappa':tf.constant(0.0, dtype=tf.float32),
-                        'weight':tf.constant(1.0, dtype=tf.float32)}
+                        'lambda_':tf.constant(0.0, dtype=tf.float16),
+                        'mu1':tf.constant(0.0, dtype=tf.float16), 
+                        'mu2':tf.constant(0.0, dtype=tf.float16), 
+                        'epsilon':tf.constant(0.0, dtype=tf.float16),
+                        'kappa':tf.constant(0.0, dtype=tf.float16),
+                        'weight':tf.constant(1.0, dtype=tf.float16)}
 
     return default_params
 
@@ -146,7 +146,7 @@ class Model():
         self.half_dt = self.dt/2
         self.nsamps = self.stim.nsamps
         self.dur = self.stim.dur
-        self.time = tf.range(self.dur, delta=self.dt, dtype=tf.float32)
+        self.time = tf.range(self.dur, delta=self.dt, dtype=tf.float16)
 
     @tf.function
     def odeRK4(self, layers_state, layers_connmats_state):

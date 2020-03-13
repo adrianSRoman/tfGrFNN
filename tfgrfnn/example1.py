@@ -8,18 +8,18 @@ import matplotlib.pyplot as plt
 dur = 50
 dt = 0.025
 fs = int(1/dt)
-time = tf.range(dur, delta=dt, dtype=tf.float32)
+time = tf.range(dur, delta=dt, dtype=tf.float16)
 # GrFNN network values and parameters
 N = 201
-freqs = tf.constant(np.logspace(np.log10(0.5), np.log10(2.0),N), dtype=tf.float32)
-initconds = tf.constant(0.01+1j*0.0, dtype=tf.complex64, shape=(N,))
-params_dict = {'alpha':tf.constant(0.0, dtype=tf.float32), 
-             'beta1':tf.constant(-1.0, dtype=tf.float32),
-             'beta2':tf.constant(-1.0, dtype=tf.float32),
-             'epsilon':tf.constant(1.0, dtype=tf.float32)}
+freqs = tf.constant(np.logspace(np.log10(0.5), np.log10(2.0),N), dtype=tf.float16)
+initconds = tf.constant(0.01+1j*0.0, dtype=tf.complex32, shape=(N,))
+params_dict = {'alpha':tf.constant(0.0, dtype=tf.float16), 
+             'beta1':tf.constant(-1.0, dtype=tf.float16),
+             'beta2':tf.constant(-1.0, dtype=tf.float16),
+             'epsilon':tf.constant(1.0, dtype=tf.float16)}
 # stimulus values
-amplitude = tf.constant(0.25+1j*0.0, dtype=tf.complex64)
-freq = tf.constant(1.0, dtype=tf.float32)
+amplitude = tf.constant(0.25+1j*0.0, dtype=tf.complex32)
+freq = tf.constant(1.0, dtype=tf.float16)
 theta = 2*np.pi*time*freq
 stim_values = tf.multiply(amplitude, 
                         tf.reshape(tf.complex(tf.math.cos(theta), 
@@ -40,7 +40,7 @@ s1 = tg.stimulus(name = 's1',
 # connect stimulus and oscillators
 l1 = tg.connect(source=s1, target=l1, 
                 matrixinit=tf.constant(1.0+1j*0.0, 
-                                        dtype=tf.complex64, shape=(1,N)))
+                                        dtype=tf.complex32, shape=(1,N)))
 # define the model
 GrFNN = tg.Model(name='GrFNN', layers=[l1], stim=s1)
 # integrate 
