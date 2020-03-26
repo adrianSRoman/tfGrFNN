@@ -45,7 +45,17 @@ def compute_input(connmat_state, source_state, target_state, typeint, epsilon):
         csrt_csit = tf.concat([csrt, csit], axis=1)
 
         return csrt_csit 
+    def compute_input_allfreq(srt_sit=source_state, trt_tit=target_state, 
+                                crt_cit=connmat_state, epsilon=epsilon):
+        srt, sit = tf.split(srt_sit, 2, axis=1)
+        crt, cit = tf.split(crt_cit, 2, axis=1)
+        csrt = tf.matmul(srt, crt) - tf.matmul(sit, cit)
+        csit = tf.matmul(sit, crt) + tf.matmul(srt, cit)
 
+        csrt_csit = tf.concat([csrt, csit], axis=1)
+
+        return csrt_csit 
+    '''
     def compute_input_allfreq(srt_sit=source_state, trt_tit=target_state, 
                                 crt_cit=connmat_state, epsilon=epsilon):
 
@@ -93,13 +103,13 @@ def compute_input(connmat_state, source_state, target_state, typeint, epsilon):
         csrt_csit = tf.concat([csrt, csit], axis=1)
 
         return csrt_csit 
-
+    '''
     csrt_csit = tf.switch_case(typeint,
                                 branch_fns={0: compute_input_1freq,
                                             1: compute_input_allfreq})
 
     return csrt_csit
-
+    
 def crdot_cidot(t, xst_yst, crt_cit, xtt_ytt, params):
 
     def nolearning(crt_cit=crt_cit):

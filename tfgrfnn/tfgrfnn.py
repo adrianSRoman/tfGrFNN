@@ -148,7 +148,7 @@ class Model():
         self.dur = self.stim.dur
         self.time = tf.range(self.dur, delta=self.dt, dtype=tf.float32)
 
-    @tf.function
+    #@tf.function
     def odeRK4(self, layers_state, layers_connmats_state):
 
         def scan_fn(layers_and_layers_connmats_state, time_dts_stim):
@@ -241,12 +241,30 @@ class Model():
 
         return layers_states, layers_connmats_states
 
-    def integrate(self):
+    def prepare_classes_for_integration(self):
         self.enumerate_layers()
         if self.zfun == xdot_ydot:
             self.complex2concat()
         layers_state, layers_connmats_state = self.list_layers_state_and_layers_connmats_state()
+        return layers_state, layers_connmats_state
+
+    def integrate(self, layers_state, layers_connmats_state, thresh_val):
         layers_states, layers_connmats_states = self.odeRK4(layers_state, layers_connmats_state)
+        l_GrFNN_r, l_GrFNN_i = tf.split(layers_states[0],2,axis=2) 
+        n_GrFNN_r, n_GrFNN_i = tf.split(layers_states[1],2,axis=2) 
+        n_GrFNN_abs = tf.sqrt(tf.add(tf.square(n_GrFNN_r), tf.square(n_GrFNN_i)))
+        cleaned_r = tf.multiply(l_GrFNN_r, n_GrFNN_abs)
+        cleaned_i = tf.multiply(l_GrFNN_i, n_GrFNN_abs)
+        cleaned_abs = tf.sqrt(tf.add(tf.square(cleaned_r), tf.square(cleaned_i)))
+        cleaned_abs = tf.subtract(cleaned_abs, thresh_val)
+        thresh_mask = tf.nn.tanh(tf.scalar_mul(1000,tf.nn.relu(cleaned_abs)))
+        cleaned_threshold = tf.multiply(cleaned_r, thresh_mask)
+        cleaned = tf.transpose(cleaned_threshold,(1,2,0))
+        cleaned = tf.reduce_mean(cleaned,1)
+        cleaned = tf.divide(cleaned, tf.reduce_max(tf.abs(cleaned)))  
+        return layers_states, layers_connmats_states, cleaned
+
+    def restore_classes_after_intergration(self, layers_states, layers_connmats_states):
         if self.zfun == xdot_ydot:
             layers_states, layers_connmats_states = self.concat2complex(layers_states, layers_connmats_states)
         self.save_layers_connmats_states(layers_states, layers_connmats_states)
