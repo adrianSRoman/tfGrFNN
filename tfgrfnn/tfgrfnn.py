@@ -248,18 +248,13 @@ class Model():
         layers_state, layers_connmats_state = self.list_layers_state_and_layers_connmats_state()
         return layers_state, layers_connmats_state
 
-    def integrate(self, layers_state, layers_connmats_state, thresh_val):
+    def integrate(self, layers_state, layers_connmats_state):
         layers_states, layers_connmats_states = self.odeRK4(layers_state, layers_connmats_state)
         l_GrFNN_r, l_GrFNN_i = tf.split(layers_states[0],2,axis=2) 
         n_GrFNN_r, n_GrFNN_i = tf.split(layers_states[1],2,axis=2) 
         n_GrFNN_abs = tf.sqrt(tf.add(tf.square(n_GrFNN_r), tf.square(n_GrFNN_i)))
         cleaned_r = tf.multiply(l_GrFNN_r, n_GrFNN_abs)
-        cleaned_i = tf.multiply(l_GrFNN_i, n_GrFNN_abs)
-        cleaned_abs = tf.sqrt(tf.add(tf.square(cleaned_r), tf.square(cleaned_i)))
-        cleaned_abs = tf.subtract(cleaned_abs, thresh_val)
-        thresh_mask = tf.nn.tanh(tf.scalar_mul(1000,tf.nn.relu(cleaned_abs)))
-        cleaned_threshold = tf.multiply(cleaned_r, thresh_mask)
-        cleaned = tf.transpose(cleaned_threshold,(1,2,0))
+        cleaned = tf.transpose(cleaned_r,(1,2,0))
         cleaned = tf.reduce_mean(cleaned,1)
         cleaned = tf.divide(cleaned, tf.reduce_max(tf.abs(cleaned)))  
         return layers_states, layers_connmats_states, cleaned

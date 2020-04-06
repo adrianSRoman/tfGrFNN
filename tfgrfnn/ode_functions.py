@@ -6,26 +6,35 @@ def xdot_ydot(t, xt_yt, connmats_state, connections, sources_state, alpha=None, 
     omega = tf.constant(2*np.pi, dtype=tf.float32)
 
     xt, yt = tf.split(xt_yt, 2, axis=1)
-    minusyt_plusxt = tf.concat([tf.multiply(-1.0,yt), xt], axis=1)
 
     x2tplusy2t = tf.add(tf.pow(xt, 2),
                         tf.pow(yt, 2))
-    x2tplusy2t_x2tplusy2t = tf.concat([x2tplusy2t, 
-                                x2tplusy2t], axis=1)
-    x2tplusy2tsquared_x2tplusy2tsquared = tf.pow(x2tplusy2t_x2tplusy2t, 2)
+    x2tplusy2tsquared = tf.pow(x2tplusy2t, 2)
 
-    xtnew_ytnew = tf.add_n([tf.multiply(alpha, xt_yt),
-                            tf.multiply(omega, minusyt_plusxt),
-                            tf.multiply(beta1, tf.multiply(xt_yt, x2tplusy2t_x2tplusy2t)),
-                            tf.divide(
-                                tf.multiply(tf.multiply(epsilon, beta2), 
-                                    tf.multiply(xt_yt, x2tplusy2tsquared_x2tplusy2tsquared)),
-                                tf.subtract(tf.constant(1.0, dtype=tf.float32), 
-                                    tf.multiply(epsilon, x2tplusy2t_x2tplusy2t)))])
+    xtnew = tf.add_n([tf.multiply(alpha, xt),
+                        tf.multiply(omega, tf.multiply(-1.0, yt)),
+                        tf.multiply(beta1, tf.multiply(xt, x2tplusy2t)),
+                        tf.divide(
+                            tf.multiply(tf.multiply(epsilon,beta2),
+                                tf.multiply(xt, x2tplusy2tsquared)),
+                            tf.subtract(tf.constant(1.0, dtype=tf.float32),
+                                tf.multiply(epsilon, x2tplusy2t)))])
 
-    csrt_csit = tf.add_n([tf.multiply(connections[iconn].params['weight'], compute_input(connmat_state, 
+    ytnew = tf.add_n([tf.multiply(alpha, yt),
+                        tf.multiply(omega, xt),
+                        tf.multiply(beta1, tf.multiply(yt, x2tplusy2t)),
+                        tf.divide(
+                            tf.multiply(tf.multiply(epsilon,beta2),
+                                tf.multiply(yt, x2tplusy2tsquared)),
+                            tf.subtract(tf.constant(1.0, dtype=tf.float32),
+                                tf.multiply(epsilon, x2tplusy2t)))])
+
+    xtnew_ytnew = tf.concat([xtnew, ytnew], axis=1)
+
+    csrt_csit = tf.add_n([compute_input(connmat_state, 
                             sources_state[connections[iconn].sourceintid],
-                            xt_yt, connections[iconn].params['typeint'], epsilon))
+                            xt_yt, connections[iconn].params['typeint'], epsilon,
+                            connections[iconn].params['weight'])
                         for iconn, connmat_state in enumerate(connmats_state)]) if connmats_state else 0
             
     dxdt_dydt = tf.multiply(freqs, tf.add(xtnew_ytnew, csrt_csit))
@@ -33,37 +42,29 @@ def xdot_ydot(t, xt_yt, connmats_state, connections, sources_state, alpha=None, 
     return dxdt_dydt
 
 
-def compute_input(connmat_state, source_state, target_state, typeint, epsilon):
+def compute_input(connmat_state, source_state, target_state, typeint, epsilon, input_weight):
 
-    def compute_input_1freq(srt_sit=source_state, crt_cit=connmat_state):
+    def compute_input_1freq(srt_sit=source_state, crt_cit=connmat_state, input_weight=input_weight):
 
         srt, sit = tf.split(srt_sit, 2, axis=1)
         crt, cit = tf.split(crt_cit, 2, axis=1)
         csrt = tf.matmul(srt, crt) - tf.matmul(sit, cit)
         csit = tf.matmul(sit, crt) + tf.matmul(srt, cit)
+        csrt = tf.multiply(input_weight, csrt)
+        csit = tf.multiply(input_weight, csit)
 
         csrt_csit = tf.concat([csrt, csit], axis=1)
 
         return csrt_csit 
-    def compute_input_allfreq(srt_sit=source_state, trt_tit=target_state, 
-                                crt_cit=connmat_state, epsilon=epsilon):
-        srt, sit = tf.split(srt_sit, 2, axis=1)
-        crt, cit = tf.split(crt_cit, 2, axis=1)
-        csrt = tf.matmul(srt, crt) - tf.matmul(sit, cit)
-        csit = tf.matmul(sit, crt) + tf.matmul(srt, cit)
 
-        csrt_csit = tf.concat([csrt, csit], axis=1)
-
-        return csrt_csit 
-    '''
     def compute_input_allfreq(srt_sit=source_state, trt_tit=target_state, 
-                                crt_cit=connmat_state, epsilon=epsilon):
+                                crt_cit=connmat_state, epsilon=epsilon, input_weight=input_weight):
 
         srt, sit = tf.split(srt_sit, 2, axis=1)
         trt, tit = tf.split(trt_tit, 2, axis=1)
         crt, cit = tf.split(crt_cit, 2, axis=1)
 
-        sqrteps = tf.sqrt(epsilon)
+        sqrteps = tf.sqrt(tf.subtract(epsilon,0.05))
         sr2 = tf.pow(srt, 2)
         si2 = tf.pow(sit, 2)
         ti2 = tf.pow(tit, 2)
@@ -95,15 +96,19 @@ def compute_input(connmat_state, source_state, target_state, typeint, epsilon):
         Pnr = tf.multiply(Pn1r,Pn2r) - tf.multiply(Pn1i,Pn2i) 
         Pni = tf.multiply(Pn1i,Pn2r) + tf.multiply(Pn1r,Pn2i) 
 
-        crt = tf.multiply(crt,Ar) - tf.multiply(cit,Ai)
-        cit = tf.multiply(crt,Ai) + tf.multiply(cit,Ar)
-        csrt = tf.matmul(Pnr, crt) - tf.matmul(Pni, cit)
-        csit = tf.matmul(Pni, crt) + tf.matmul(Pnr, cit)
+        csrt = tf.matmul(Pnr,crt) - tf.matmul(Pni,cit)
+        csit = tf.matmul(Pni,crt) + tf.matmul(Pnr,cit)
+
+        csrt = tf.multiply(Ar,csrt) - tf.multiply(Ai,csit)
+        csit = tf.multiply(Ai,csrt) + tf.multiply(Ar,csit)
+
+        csrt = tf.multiply(input_weight, csrt)
+        csit = tf.multiply(input_weight, csit)
 
         csrt_csit = tf.concat([csrt, csit], axis=1)
 
         return csrt_csit 
-    '''
+
     csrt_csit = tf.switch_case(typeint,
                                 branch_fns={0: compute_input_1freq,
                                             1: compute_input_allfreq})
