@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import copy
 
-from ode_functions import xdot_ydot, crdot_cidot
+from ode_functions import xdot_ydot
 
 
 
@@ -135,119 +135,149 @@ class Model():
     def __init__(self, name = '',
                     layers = None,
                     stim = None,
-                    zfun = xdot_ydot,
-                    cfun = crdot_cidot):
+                    zfun = xdot_ydot):
 
+        self.name = name
         self.layers = layers
         self.stim = stim if stim else stimulus()
         self.zfun = zfun
-        self.cfun = cfun
         self.dt = self.stim.dt
         self.half_dt = self.dt/2
         self.nsamps = self.stim.nsamps
         self.dur = self.stim.dur
         self.time = tf.range(self.dur, delta=self.dt, dtype=tf.float32)
 
-    #@tf.function
-    def odeRK4(self, layers_state, layers_connmats_state):
+    def enumerate_layers(self):
+        self.stim.intid = 0
+        for ilayer, layer in enumerate(self.layers):
+            layer.intid = ilayer+1
+        for layer in self.layers:
+            for conn in layer.connections:
+                conn.sourceintid = conn.source.intid
 
-        def scan_fn(layers_and_layers_connmats_state, time_dts_stim):
+    def delete_layer_enumeration(self):
+        del self.stim.intid 
+        for layer in self.layers:
+            del layer.intid
+            for conn in layer.connections:
+                del conn.sourceintid
 
-            def get_next_k(time_val, layers_state, layers_connmats_state):
+    def __repr__(self):
+        return "<GrFNN Model %s>" % (self.name) 
 
-                layers_k = [self.zfun(time_val, layer_state, layer_connmats_state, 
-                                    self.layers[ilayer].connections, layers_state, 
-                                    **self.layers[ilayer].params)
-                                for ilayer, (layer_state, layer_connmats_state) 
-                                in enumerate(zip(layers_state[1:], layers_connmats_state))]
-                layers_connmats_k = [[self.cfun(time_val,
-                                        layers_state[self.layers[ilayer].connections[iconn].sourceintid], 
-                                        connmat_state, layer_state, 
-                                        self.layers[ilayer].connections[iconn].params)
-                                    for iconn, connmat_state in enumerate(layer_connmats_state)]
-                                for ilayer, (layer_state, layer_connmats_state) 
-                                in enumerate(zip(layers_state[1:], layers_connmats_state)) 
-                                if layer_connmats_state]
 
-                return layers_k, layers_connmats_k
 
-            def update_states(time_scaling, layers_k0, layers_k, layers_connmats_k0, layers_connmats_k, new_stim):
+def get_model_variables_for_integration(Model, dtype=tf.float16):
 
-                layers_state = [tf.add(layer_k0, tf.scalar_mul(time_scaling, layer_k)) 
-                                for (layer_k0, layer_k) in zip(layers_k0, layers_k)]
-                layers_connmats_state = [[tf.add(connmat_k0, tf.scalar_mul(time_scaling, connmat_k))
-                                    for (connmat_k0, connmat_k) in zip(layer_connmats_k0, layer_connmats_k)]
-                                for (layer_connmats_k0, layer_connmats_k) 
-                                in zip(layers_connmats_k0, layers_connmats_k) 
-                                if layer_connmats_k0]
-                layers_state.insert(0, new_stim)
+    Model.enumerate_layers()
+    time = tf.cast(Model.time,dtype)
+    stim_values = tf.cast(complex2concat(Model.stim.values,2),dtype)
+    layers_state = [tf.tile(tf.expand_dims(tf.cast(complex2concat(layer.initconds,0),dtype),axis=0),
+                        tf.constant([Model.stim.ndatapoints.numpy(),1])) 
+                    for layer in Model.layers]
+    layers_alpha = [tf.cast(layer.params['alpha'],dtype) for layer in Model.layers]
+    layers_beta1 = [tf.cast(layer.params['beta1'],dtype) for layer in Model.layers]
+    layers_beta2 = [tf.cast(layer.params['beta2'],dtype) for layer in Model.layers]
+    layers_epsilon = [tf.cast(layer.params['epsilon'],dtype) for layer in Model.layers]
+    layers_freqs = [tf.cast(layer.params['freqs'],dtype) for layer in Model.layers]
+    layers_conns_source_intid = [[conn.source.intid for conn in layer.connections] 
+                    for layer in Model.layers]
+    layers_conns_typeint = [[conn.params['typeint'] for conn in layer.connections] 
+                    for layer in Model.layers]
+    layers_conns_weight = [[tf.cast(conn.params['weight'],dtype) for conn in layer.connections] 
+                    for layer in Model.layers]
+    layers_connmats = [[tf.cast(complex2concat(conn.matrixinit,0),dtype)
+                        for conn in layer.connections]
+                    for layer in Model.layers if layer.connections]
+    zfun = Model.zfun
+    Model.delete_layer_enumeration()
 
-                return layers_state, layers_connmats_state
+    return layers_state, layers_alpha, layers_beta1, \
+            layers_beta2, layers_epsilon, layers_freqs, \
+            layers_connmats, layers_conns_source_intid, \
+            layers_conns_typeint, layers_conns_weight, \
+            zfun, stim_values, time 
 
-            layers_state, layers_connmats_state = layers_and_layers_connmats_state
-            t, dt, stim, stim_shift = time_dts_stim
 
-            t_plus_half_dt = tf.add(t, dt/2)
-            t_plus_dt = tf.add(t, dt)
 
-            layers_k0 = layers_state.copy()
-            layers_state.insert(0, stim)
-            layers_connmats_k0 = layers_connmats_state.copy()
+def complex2concat(x, axis):
+    return tf.concat([tf.math.real(x),tf.math.imag(x)],axis=axis)	
 
-            layers_k1, layers_connmats_k1 = get_next_k(t, layers_state, layers_connmats_state)
-            layers_state, layers_connmats_state = update_states(dt/2, layers_k0, layers_k1, 
-                                                                layers_connmats_k0, layers_connmats_k1, 
-                                                                tf.divide(tf.add(stim, stim_shift),2))
-            layers_k2, layers_connmats_k2 = get_next_k(t_plus_half_dt, layers_state, layers_connmats_state)
-            layers_state, layers_connmats_state = update_states(dt/2, layers_k0, layers_k2, 
-                                                                layers_connmats_k0, layers_connmats_k2, 
-                                                                tf.divide(tf.add(stim, stim_shift),2))
-            layers_k3, layers_connmats_k3 = get_next_k(t_plus_half_dt, layers_state, layers_connmats_state)
-            layers_state, layers_connmats_state = update_states(dt, layers_k0, layers_k3, 
-                                                                layers_connmats_k0, layers_connmats_k3, 
-                                                                stim_shift)
-            layers_k4, layers_connmats_k4 = get_next_k(t_plus_dt, layers_state, layers_connmats_state)
 
-            layers_state = [tf.add(layer_k0, 
-                            tf.multiply(dt/6,  tf.add_n([layer_k1,
-                                                        tf.scalar_mul(2, layer_k2),
-                                                        tf.scalar_mul(2, layer_k3),
-                                                        layer_k4])))
-                            for (layer_k0, layer_k1, layer_k2, layer_k3, layer_k4) 
-                            in zip(layers_k0, layers_k1, layers_k2, layers_k3, layers_k4)]
-            layers_connmats_state = [[tf.add(connmat_k0, 
-                            tf.multiply(dt/6,  tf.add_n([connmat_k1,
-                                                        tf.scalar_mul(2, connmat_k2),
-                                                        tf.scalar_mul(2, connmat_k3),
-                                                        connmat_k4])))
-                                for (connmat_k0, connmat_k1, connmat_k2, connmat_k3, connmat_k4) 
-                                in zip(layer_connmats_k0, layer_connmats_k1, 
-                                    layer_connmats_k2, layer_connmats_k3, layer_connmats_k4)]
-                            for (layer_connmats_k0, layer_connmats_k1, 
-                                layer_connmats_k2, layer_connmats_k3, layer_connmats_k4) 
-                            in zip(layers_connmats_k0, layers_connmats_k1, layers_connmats_k2, 
-                                layers_connmats_k3, layers_connmats_k4) 
-                            if layer_connmats_k0]
 
-            return [layers_state, layers_connmats_state]
+def Runge_Kutta_4(time, layers_state, layers_alpha, layers_beta1,
+                layers_beta2, layers_epsilon, layers_freqs,
+                layers_connmats, layers_conns_source_intid, 
+                layers_conns_typeint, layers_conns_weight, 
+                zfun, stim_values, dtype=tf.float16):
 
-        dts = self.time[1:] - self.time[:-1]
-        layers_states, layers_connmats_states = tf.scan(scan_fn, 
-                                                        [self.time[:-1], 
-                                                            dts, 
-                                                            tf.transpose(self.stim.values[:,:-1,:],(1,0,2)), 
-                                                            tf.transpose(self.stim.values[:,1:,:],(1,0,2))], 
-                                                        [layers_state, layers_connmats_state])
+    def scan_fn(layers_state, time_dts_stim):
+    
+        def get_next_k(time_val, layers_state):
+    
+            layers_k = [zfun(time_val, layer_state, layer_alpha, layer_beta1,
+                            layer_beta2, layer_epsilon, layer_freqs, layer_connmats, 
+                            layers_state, layer_conns_source_intid, layer_conns_typeint, 
+                            layer_conns_weight, dtype)
+                for layer_state, layer_alpha, layer_beta1, \
+                    layer_beta2, layer_epsilon, layer_freqs, layer_connmats, \
+                    layer_conns_source_intid, layer_conns_typeint, \
+                    layer_conns_weight \
+                in zip(layers_state[1:], layers_alpha, layers_beta1,
+                    layers_beta2, layers_epsilon, layers_freqs,
+                    layers_connmats, layers_conns_source_intid, 
+                    layers_conns_typeint, layers_conns_weight)]
+            
+            return layers_k
+    
+        def update_states(time_scaling, layers_k0, layers_k, new_stim):
+    
+            layers_state = [tf.add(layer_k0, tf.scalar_mul(time_scaling, layer_k)) 
+    	                for (layer_k0, layer_k) in zip(layers_k0, layers_k)]
+            layers_state.insert(0, new_stim)
+    
+            return layers_state
+    
+        t, dt, stim, stim_shift = time_dts_stim
+    
+        t_plus_half_dt = tf.add(t, dt/2)
+        t_plus_dt = tf.add(t, dt)
+    
+        layers_k0 = layers_state.copy()
+        layers_state.insert(0, stim)
+    
+        layers_k1 = get_next_k(t, layers_state)
+        layers_state = update_states(dt/2, layers_k0, layers_k1, 
+    				tf.divide(tf.add(stim, stim_shift),2))
+        layers_k2 = get_next_k(t_plus_half_dt, layers_state)
+        layers_state = update_states(dt/2, layers_k0, layers_k2, 
+    				tf.divide(tf.add(stim, stim_shift),2))
+        layers_k3 = get_next_k(t_plus_half_dt, layers_state)
+        layers_state = update_states(dt, layers_k0, layers_k3, 
+    				stim_shift)
+        layers_k4 = get_next_k(t_plus_dt, layers_state)
+    
+        layers_state = [tf.add(layer_k0, 
+    		    tf.multiply(dt/6,  tf.add_n([layer_k1,
+    						tf.scalar_mul(2, layer_k2),
+    						tf.scalar_mul(2, layer_k3),
+    						layer_k4])))
+                        for (layer_k0, layer_k1, layer_k2, layer_k3, layer_k4) 
+                        in zip(layers_k0, layers_k1, layers_k2, layers_k3, layers_k4)]
 
-        return layers_states, layers_connmats_states
+        return layers_state
+    
+    dts = time[1:] - time[:-1]
+    layers_states = tf.scan(scan_fn, 
+    			[time[:-1], 
+    			    dts, 
+    			    tf.transpose(stim_values[:,:-1,:],(1,0,2)), 
+    			    tf.transpose(stim_values[:,1:,:],(1,0,2))], 
+    			layers_state)
+    
+    return layers_states
 
-    def prepare_classes_for_integration(self):
-        self.enumerate_layers()
-        if self.zfun == xdot_ydot:
-            self.complex2concat()
-        layers_state, layers_connmats_state = self.list_layers_state_and_layers_connmats_state()
-        return layers_state, layers_connmats_state
-
+'''
     def integrate(self, layers_state, layers_connmats_state):
         layers_states, layers_connmats_states = self.odeRK4(layers_state, layers_connmats_state)
         l_GrFNN_r, l_GrFNN_i = tf.split(layers_states[0],2,axis=2) 
@@ -266,13 +296,6 @@ class Model():
         self.delete_layer_enumeration()
         return self
     
-    def delete_layer_enumeration(self):
-        del self.stim.intid 
-        for layer in self.layers:
-            del layer.intid
-            for conn in layer.connections:
-                del conn.sourceintid
-
     def save_layers_connmats_states(self, layers_states, layers_connmats_states):
         for ilayer, layer, in enumerate(self.layers):
             layer.states = tf.transpose(layers_states[ilayer],(1,2,0))
@@ -298,31 +321,4 @@ class Model():
                                                                                                     2, axis=2)
                     layers_connmats_states[ilayer][iconn] = tf.complex(connmat_states_real, connmat_states_imag)
         return layers_states, layers_connmats_states
-
-    def list_layers_state_and_layers_connmats_state(self):
-        layers_state = [layer.initconds for layer in self.layers]
-        layers_connmats_state = [[conn.matrixinit 
-                                    for conn in layer.connections] 
-                                for layer in self.layers if layer.connections]
-        return layers_state, layers_connmats_state
-
-    def complex2concat(self):
-        self.stim.values = tf.concat([tf.math.real(self.stim.values), 
-                                      tf.math.imag(self.stim.values)], axis=2)
-        for layer in self.layers:
-            layer.params['freqs'] = tf.concat([layer.params['freqs'], layer.params['freqs']], axis=0)
-            layer.initconds = tf.tile(tf.expand_dims(tf.concat([tf.math.real(layer.initconds), 
-                                                    tf.math.imag(layer.initconds)], axis=0), axis=0),
-                                        tf.constant([self.stim.ndatapoints.numpy(),1], dtype=tf.int32))
-            layer.N = layer.N*2
-            for conn in layer.connections:
-                conn.matrixinit = tf.concat([tf.math.real(conn.matrixinit), 
-                                            tf.math.imag(conn.matrixinit)], axis=1)
-
-    def enumerate_layers(self):
-        self.stim.intid = 0
-        for ilayer, layer in enumerate(self.layers):
-            layer.intid = ilayer+1
-        for layer in self.layers:
-            for conn in layer.connections:
-                conn.sourceintid = conn.source.intid
+'''
