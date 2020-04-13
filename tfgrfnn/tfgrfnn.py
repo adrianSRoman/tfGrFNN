@@ -58,11 +58,11 @@ class stimulus():
         self.values = values
         vshape = tf.shape(self.values)
         self.ndatapoints = vshape[0]
-        self.nsamps = vshape[1]
+        self.nsamps = tf.cast(vshape[1],dtype=tf.float32)
         self.nchannels = vshape[2]
-        self.fs = fs
-        self.dt = 1.0/self.fs
-        self.dur = self.nsamps/self.fs
+        self.fs = tf.constant(fs, dtype=tf.float32)
+        self.dt = tf.constant(1.0/self.fs, dtype=tf.float32)
+        self.dur = tf.constant(self.nsamps/self.fs, dtype=tf.float32)
 
     def __repr__(self):
         return "<Input stimulus with %s datapoints %s samples and %s channels>" % (self.ndatapoints,
